@@ -1,3 +1,5 @@
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";

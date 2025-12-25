@@ -1,3 +1,6 @@
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { getRoomDetailsDB, updateRoomStageDB } from "@/lib/db";
 import { getSupabase } from "@/lib/supabase";
