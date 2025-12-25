@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 
@@ -6,7 +7,7 @@ interface LogicThermometerProps {
   className?: string
 }
 
-export function LogicThermometer({ score, className }: LogicThermometerProps) {
+export const LogicThermometer = memo(function LogicThermometer({ score, className }: LogicThermometerProps) {
   // Color gradient based on score
   const getColor = (s: number) => {
     if (s < 30) return "bg-red-500"
@@ -30,4 +31,4 @@ export function LogicThermometer({ score, className }: LogicThermometerProps) {
       </span>
     </div>
   )
-}
+})

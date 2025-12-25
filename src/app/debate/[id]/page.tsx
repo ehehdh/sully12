@@ -170,7 +170,18 @@ function DebateContent() {
           senderName: m.sender_name,
           sender_session_id: m.sender_session_id,
         }));
-      setMessages(serverMessages);
+      
+      // 메시지가 실제로 변경되었는지 확인 (ID 목록 비교)
+      setMessages(prev => {
+        const prevIds = prev.map(m => m.id).join(',');
+        const newIds = serverMessages.map((m: any) => m.id).join(',');
+        
+        // ID 목록이 같으면 업데이트하지 않음 (깜빡임 방지)
+        if (prevIds === newIds) {
+          return prev;
+        }
+        return serverMessages;
+      });
       
       // Pending 메시지 정리 (서버에 반영된 것 제거)
       // 더 강력한 중복 제거: content + sessionId 또는 content만으로도 매칭
@@ -202,11 +213,34 @@ function DebateContent() {
         });
       });
 
-      setParticipants(Array.isArray(data.participants) ? data.participants : []);
-      setStage((data.stage as DebateStage) || 'waiting');
-      setStageStartedAt(data.stage_started_at ? new Date(data.stage_started_at) : new Date());
-      setLogicScorePro(data.logic_score_pro || 50);
-      setLogicScoreCon(data.logic_score_con || 50);
+      // 참가자도 변경 시에만 업데이트
+      const newParticipants = Array.isArray(data.participants) ? data.participants : [];
+      setParticipants(prev => {
+        const prevIds = prev.map(p => p.id).join(',');
+        const newIds = newParticipants.map((p: any) => p.id).join(',');
+        if (prevIds === newIds) return prev;
+        return newParticipants;
+      });
+      
+      // 스테이지 변경 시에만 업데이트
+      const newStage = (data.stage as DebateStage) || 'waiting';
+      setStage(prev => prev === newStage ? prev : newStage);
+      
+      if (data.stage_started_at) {
+        const newStageStartedAt = new Date(data.stage_started_at);
+        setStageStartedAt(prev => {
+          if (!prev || prev.getTime() !== newStageStartedAt.getTime()) {
+            return newStageStartedAt;
+          }
+          return prev;
+        });
+      }
+      
+      // 점수는 값이 다를 때만 업데이트 (깜빡임 방지)
+      const newProScore = data.logic_score_pro ?? 50;
+      const newConScore = data.logic_score_con ?? 50;
+      setLogicScorePro(prev => prev === newProScore ? prev : newProScore);
+      setLogicScoreCon(prev => prev === newConScore ? prev : newConScore);
       
       // 발언권 정보 업데이트
       const speaker = data.current_speaker || null;
