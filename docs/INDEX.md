@@ -6,6 +6,7 @@
 
 ### 프로젝트 정보
 - [README.md](./README.md) - 프로젝트 소개 및 빠른 시작
+- [ROADMAP.md](./ROADMAP.md) - **📋 개발 로드맵 (TODO)**
 
 ### 개발 가이드
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 시스템 아키텍처 및 설계
