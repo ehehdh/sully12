@@ -173,10 +173,34 @@ function DebateContent() {
       setMessages(serverMessages);
       
       // Pending 메시지 정리 (서버에 반영된 것 제거)
-      setPendingMessages(prev => prev.filter(p => !serverMessages.some((m: any) => 
-          m.content === p.content && 
-          m.sender_session_id === p.sender_session_id // && timestamp check if needed
-      )));
+      // 더 강력한 중복 제거: content + sessionId 또는 content만으로도 매칭
+      setPendingMessages(prev => {
+        if (prev.length === 0) return prev;
+        
+        return prev.filter(pendingMsg => {
+          // 서버 메시지 중에서 같은 내용이 있는지 확인
+          const isDuplicate = serverMessages.some((serverMsg: any) => {
+            // 1순위: content + session_id 매칭
+            if (serverMsg.content === pendingMsg.content && 
+                serverMsg.sender_session_id === pendingMsg.sender_session_id) {
+              return true;
+            }
+            // 2순위: 같은 세션에서 비슷한 시간대에 보낸 같은 내용
+            if (serverMsg.content === pendingMsg.content) {
+              const timeDiff = Math.abs(
+                new Date(serverMsg.created_at || serverMsg.timestamp).getTime() - 
+                pendingMsg.timestamp.getTime()
+              );
+              // 10초 이내면 같은 메시지로 간주
+              if (timeDiff < 10000) return true;
+            }
+            return false;
+          });
+          
+          // 중복이면 제거 (filter에서 false 반환)
+          return !isDuplicate;
+        });
+      });
 
       setParticipants(Array.isArray(data.participants) ? data.participants : []);
       setStage((data.stage as DebateStage) || 'waiting');
@@ -743,7 +767,44 @@ function DebateContent() {
       {/* 중앙: 채팅 */}
       <div className="flex-1">
         <ChatInterface
-          messages={[...messages, ...pendingMessages].sort((a,b) => a.timestamp.getTime() - b.timestamp.getTime())}
+          messages={(() => {
+            // 서버 메시지와 pending 메시지 합치기
+            const allMessages = [...messages, ...pendingMessages];
+            
+            // 중복 제거: 같은 content가 있으면 서버 메시지(실제 id) 우선
+            const uniqueMessages = allMessages.reduce((acc, msg) => {
+              // temp-로 시작하는 id는 pending 메시지
+              const isPending = msg.id?.startsWith('temp-');
+              
+              // 같은 내용의 메시지가 이미 있는지 확인
+              const existingIndex = acc.findIndex(m => 
+                m.content === msg.content && 
+                m.sender_session_id === msg.sender_session_id
+              );
+              
+              if (existingIndex >= 0) {
+                // 이미 같은 메시지가 있음
+                const existing = acc[existingIndex];
+                const existingIsPending = existing.id?.startsWith('temp-');
+                
+                // 서버 메시지가 우선 (pending 메시지 교체)
+                if (existingIsPending && !isPending) {
+                  acc[existingIndex] = msg;
+                }
+                // 둘 다 서버 메시지면 먼저 것 유지
+                return acc;
+              }
+              
+              // 새 메시지 추가
+              acc.push(msg);
+              return acc;
+            }, [] as Message[]);
+            
+            // 시간순 정렬
+            return uniqueMessages.sort((a, b) => 
+              a.timestamp.getTime() - b.timestamp.getTime()
+            );
+          })()}
           onSendMessage={handleSendMessage}
           typingUsers={typingUsers}
           disabled={isInputDisabled}
