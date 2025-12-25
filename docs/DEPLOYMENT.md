@@ -1,14 +1,47 @@
 # 🚀 배포 가이드
 
-> Politi-Log 배포 방법 및 환경 설정
+> Politi-Log 배포 방법 (Vercel 단독 배포)
 
 ## 📋 목차
 
-1. [환경 변수](#환경-변수)
-2. [Vercel 배포](#vercel-배포)
-3. [Supabase 설정](#supabase-설정)
-4. [도메인 설정](#도메인-설정)
-5. [모니터링](#모니터링)
+1. [아키텍처](#아키텍처)
+2. [환경 변수](#환경-변수)
+3. [Vercel 배포](#vercel-배포)
+4. [Supabase 설정](#supabase-설정)
+5. [배포 후 확인](#배포-후-확인)
+
+---
+
+## 아키텍처
+
+Politi-Log는 **Vercel 단독 배포** 구조를 사용합니다:
+
+```
+┌─────────────────────────────────────────┐
+│              Vercel                      │
+│  ┌─────────────────────────────────┐    │
+│  │  Next.js App                    │    │
+│  │  - 프론트엔드 (React)           │    │
+│  │  - API Routes (백엔드)          │    │
+│  └─────────────────────────────────┘    │
+└─────────────────┬───────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+        ▼                   ▼
+┌───────────────┐   ┌───────────────┐
+│   Supabase    │   │   Groq API    │
+│  - PostgreSQL │   │  - AI 분석    │
+│  - Realtime   │   │  - 팩트체크   │
+│  - Auth       │   │  - 판정       │
+└───────────────┘   └───────────────┘
+```
+
+**왜 Vercel만 사용하나요?**
+- 관리 포인트 최소화
+- 무료 티어로 충분
+- Next.js API Routes로 백엔드 기능 구현
+- 나중에 필요하면 백엔드 분리 가능
 
 ---
 
@@ -16,83 +49,51 @@
 
 ### 필수 환경 변수
 
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+| 변수명 | 설명 | 예시 |
+|--------|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | `https://xxx.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase 익명 키 | `eyJhbG...` |
+| `GROQ_API_KEY` | Groq API 키 (AI 분석용) | `gsk_xxx...` |
 
-# AI
-GROQ_API_KEY=your-groq-api-key
-```
+### Vercel에서 환경 변수 설정
 
-### 선택적 환경 변수 (Phase 3+)
-
-```env
-# Redis (영속성 레이어)
-REDIS_URL=redis://localhost:6379
-
-# 소셜 로그인
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-KAKAO_CLIENT_ID=
-
-# 분석
-NEXT_PUBLIC_GA_ID=
-```
-
-### 보안 주의사항
-
-⚠️ **절대로 커밋하지 마세요:**
-- `.env.local` 파일
-- API 키가 포함된 파일
-- 시크릿 토큰
+1. [Vercel Dashboard](https://vercel.com/dashboard) 접속
+2. 프로젝트 선택
+3. **Settings** → **Environment Variables**
+4. 각 변수 추가 (Production, Preview, Development 모두 체크)
 
 ---
 
 ## Vercel 배포
 
-### 1. 프로젝트 연결
+### 최초 배포
+
+1. [Vercel](https://vercel.com) 로그인
+2. **New Project** 클릭
+3. GitHub 저장소 연결 (`ehehdh/sully12`)
+4. 설정:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `.` (비워두기)
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `.next`
+5. **Environment Variables** 추가
+6. **Deploy** 클릭
+
+### 자동 배포
+
+GitHub에 푸시하면 자동으로 배포됩니다:
 
 ```bash
-# Vercel CLI 설치
-npm i -g vercel
-
-# 로그인
-vercel login
-
-# 프로젝트 초기화
-vercel
+git add .
+git commit -m "feat: add new feature"
+git push origin main
 ```
 
-### 2. 환경 변수 설정
+### 수동 재배포
 
-Vercel Dashboard에서:
-
-1. **Settings** → **Environment Variables**
-2. 각 환경 변수 추가:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `GROQ_API_KEY`
-
-### 3. 빌드 설정
-
-```json
-// vercel.json (선택사항)
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "framework": "nextjs"
-}
-```
-
-### 4. 배포
-
-```bash
-# 프로덕션 배포
-vercel --prod
-
-# 또는 GitHub 연동 시 자동 배포
-```
+1. Vercel Dashboard → 프로젝트
+2. **Deployments** 탭
+3. 최신 배포 → **...** → **Redeploy**
 
 ---
 
@@ -100,143 +101,76 @@ vercel --prod
 
 ### 1. 프로젝트 생성
 
-1. [Supabase Dashboard](https://supabase.com/dashboard) 접속
+1. [Supabase](https://supabase.com) 로그인
 2. **New Project** 클릭
 3. 프로젝트 정보 입력
 
-### 2. 데이터베이스 스키마 적용
+### 2. 데이터베이스 스키마
 
-```bash
-# Supabase CLI 사용
-supabase db push
-
-# 또는 SQL Editor에서 직접 실행
-# supabase_schema.sql 파일 내용 복사/붙여넣기
-```
-
-### 3. RLS (Row Level Security) 설정
+SQL Editor에서 `supabase_schema.sql` 실행:
 
 ```sql
--- rooms 테이블 RLS
-ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Anyone can view rooms"
-  ON rooms FOR SELECT
-  USING (true);
-
-CREATE POLICY "Anyone can create rooms"
-  ON rooms FOR INSERT
-  WITH CHECK (true);
+-- 주요 테이블
+- rooms: 토론방
+- participants: 참가자
+- messages: 메시지
+- issues: 토론 주제
 ```
 
-### 4. Realtime 활성화
+### 3. Realtime 활성화
 
 1. **Database** → **Replication**
-2. 필요한 테이블에 Realtime 활성화:
+2. 다음 테이블에 Realtime 활성화:
    - `rooms`
    - `messages`
    - `participants`
 
----
+### 4. RLS 정책
 
-## 도메인 설정
-
-### Vercel 도메인
-
-1. **Settings** → **Domains**
-2. 커스텀 도메인 추가
-3. DNS 설정:
-   - A Record: `76.76.21.21`
-   - CNAME: `cname.vercel-dns.com`
-
-### SSL/HTTPS
-
-Vercel에서 자동으로 Let's Encrypt SSL 인증서 발급
+현재 개발 단계에서는 RLS 비활성화 상태입니다.
+프로덕션 배포 전 보안 정책 설정 필요.
 
 ---
 
-## 모니터링
+## 배포 후 확인
 
-### Vercel Analytics
-
-```typescript
-// next.config.mjs
-const nextConfig = {
-  // Analytics 활성화
-  experimental: {
-    webVitals: true,
-  },
-};
-```
-
-### 로그 확인
-
-```bash
-# Vercel 로그
-vercel logs your-deployment-url
-
-# 실시간 로그
-vercel logs --follow
-```
-
-### 에러 추적
-
-Sentry 또는 다른 에러 추적 서비스 연동 권장
-
----
-
-## 배포 체크리스트
-
-### 배포 전
-
-- [ ] 환경 변수 모두 설정
-- [ ] 빌드 테스트 (`npm run build`)
-- [ ] 린트 통과 (`npm run lint`)
-- [ ] Supabase 스키마 동기화
-
-### 배포 후
+### 체크리스트
 
 - [ ] 메인 페이지 접속 확인
+- [ ] 토론 주제 목록 로드 확인
 - [ ] 토론방 생성 테스트
-- [ ] AI 분석 기능 테스트
-- [ ] 실시간 통신 테스트
+- [ ] 토론방 입장 테스트
+- [ ] 메시지 전송 테스트
+- [ ] AI 분석 동작 확인
 
----
+### 문제 해결
 
-## 트러블슈팅
-
-### 빌드 실패
-
+#### 빌드 실패
 ```bash
 # 로컬에서 빌드 테스트
 npm run build
-
-# 캐시 삭제
-rm -rf .next node_modules
-npm install
-npm run build
 ```
 
-### 환경 변수 문제
+#### API 오류
+- Vercel Dashboard → **Functions** 탭에서 로그 확인
+- 환경 변수 설정 확인
 
-- `NEXT_PUBLIC_` 접두사 확인 (클라이언트용)
-- Vercel에서 환경 변수 올바르게 설정되었는지 확인
-
-### Supabase 연결 오류
-
-- URL 및 키 값 확인
-- RLS 정책 확인
-- Realtime 활성화 확인
+#### 데이터베이스 연결 오류
+- Supabase URL/Key 확인
+- Supabase 프로젝트 상태 확인 (일시정지 여부)
 
 ---
 
-## 롤백
+## 배포 URL
 
-```bash
-# 이전 배포로 롤백
-vercel rollback [deployment-url]
-```
+- **Production**: https://sully12.vercel.app (또는 설정한 도메인)
+- **GitHub**: https://github.com/ehehdh/sully12
 
 ---
 
-문제가 발생하면 이슈를 생성해주세요! 🐛
+## 다음 단계
+
+1. ✅ Vercel 배포 완료
+2. ⬜ 로그인 기능 추가 (Supabase Auth)
+3. ⬜ 커스텀 도메인 연결
+4. ⬜ 모바일 앱 개발 (선택사항)
