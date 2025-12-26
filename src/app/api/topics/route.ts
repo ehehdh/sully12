@@ -84,11 +84,12 @@ export async function GET(req: Request) {
       
       if (newsItems.length > 0) {
         newsContext = `
-아래는 "${keyword}" 검색 결과로 나온 최신 뉴스입니다. 반드시 이 뉴스 내용을 바탕으로 토론 주제를 만드세요:
+아래는 "${keyword}" 관련 최신 뉴스 기사들입니다:
 
-${newsItems.slice(0, 5).map((item, i) => 
-  `뉴스${i + 1}: ${stripHtml(item.title)} - ${stripHtml(item.description)}`
-).join('\n')}
+${newsItems.slice(0, 8).map((item, i) => 
+  `[기사${i + 1}] ${stripHtml(item.title)}
+   내용: ${stripHtml(item.description)}`
+).join('\n\n')}
 `;
         console.log("News context:", newsContext);
       } else {
@@ -98,28 +99,35 @@ ${newsItems.slice(0, 5).map((item, i) =>
 
     // 키워드 기반 프롬프트 (뉴스 컨텍스트 포함)
     const prompt = keyword ? `
-당신은 한국의 시사 전문가입니다.
+당신은 한국의 시사 토론 전문가입니다.
 
-[중요] 사용자가 "${keyword}" 키워드로 검색했습니다. 
-모든 토론 주제는 반드시 "${keyword}"와 직접적으로 관련되어야 합니다.
-"${keyword}"와 관련 없는 주제는 절대 생성하지 마세요.
+[작업 목표]
+"${keyword}" 관련 뉴스 기사들을 분석하여 대립하는 의견이 존재하는 토론 주제를 추출하세요.
+단순히 뉴스를 요약하는 것이 아니라, 기사들에서 나타난 찬성과 반대 입장을 파악하여 토론 주제로 만드세요.
 
-${newsContext || `"${keyword}" 관련 최신 이슈를 바탕으로 토론 주제를 생성하세요.`}
+${newsContext || `"${keyword}" 관련 최신 이슈에서 대립하는 의견을 찾아 토론 주제를 생성하세요.`}
 
-요구사항:
-1. "${keyword}" 키워드와 직접 관련된 토론 주제를 ${count}개 생성하세요.
-2. 주제 제목에 "${keyword}" 또는 관련 용어가 반드시 포함되어야 합니다.
-3. 각 주제는 찬성/반대가 가능해야 합니다.
-4. 카테고리: ${CATEGORIES.join(', ')} 중 선택
-5. [중요] 각 주제는 서로 다른 관점/쟁점을 다루어야 합니다. 중복되거나 유사한 주제를 생성하지 마세요.
+[작업 지침]
+1. 위 뉴스 기사들을 분석하여 "${keyword}"와 관련된 논쟁 포인트를 찾으세요.
+2. 각 주제에 대해 실제로 존재하는 찬성 측 주장과 반대 측 주장을 명시하세요.
+3. 서로 다른 쟁점 ${count}개를 찾아 토론 주제로 만드세요.
+4. 각 주제의 detailed_description에는:
+   - 찬성 측: "~~~"라고 주장합니다.
+   - 반대 측: "~~~"라고 주장합니다.
+   형식으로 양측 의견을 구체적으로 작성하세요.
+
+[제약 조건]
+- 모든 주제는 "${keyword}"와 직접 관련되어야 합니다.
+- 중복되거나 유사한 주제는 생성하지 마세요.
+- 카테고리: ${CATEGORIES.join(', ')} 중 선택
 
 JSON 형식으로만 응답:
 {
   "topics": [
     {
-      "label": "주제 제목 (${keyword} 관련, 15자 이내)",
-      "description": "핵심 쟁점 (30자 이내)",
-      "detailed_description": "찬성/반대 논리 포함 (100자)",
+      "label": "토론 주제 제목 (15자 이내)",
+      "description": "핵심 쟁점을 질문 형태로 (예: ~해야 하는가?)",
+      "detailed_description": "찬성 측: ~. 반대 측: ~. (100자 내외)",
       "category": "카테고리"
     }
   ]
