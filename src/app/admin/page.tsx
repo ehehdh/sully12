@@ -14,16 +14,31 @@ import {
   Sparkles,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  LogOut
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Issue } from "@/lib/database.types";
 
 export default function AdminPage() {
+  const router = useRouter();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // 관리자 로그아웃
+  const handleAdminLogout = async () => {
+    if (!confirm('관리자 세션을 종료하시겠습니까?')) return;
+    
+    try {
+      await fetch('/api/admin/auth', { method: 'DELETE' });
+      router.push('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
   
   // 새 이슈 폼
   const [newTitle, setNewTitle] = useState("");
@@ -178,9 +193,19 @@ export default function AdminPage() {
             <Shield className="w-6 h-6 text-red-500" />
             <h1 className="text-2xl font-bold">관리자 페이지</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={fetchIssues}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={fetchIssues}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleAdminLogout}
+              className="text-red-400 hover:text-red-300"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </header>
 
         {/* 퀵 링크 */}
