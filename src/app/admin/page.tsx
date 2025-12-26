@@ -48,6 +48,7 @@ export default function AdminPage() {
   
   // AI 제안
   const [aiSuggestions, setAiSuggestions] = useState<{label: string; description: string; detailed_description?: string; category?: string}[]>([]);
+  const [aiKeyword, setAiKeyword] = useState(""); // AI 키워드 검색
 
   // 이슈 목록 로드
   const fetchIssues = useCallback(async () => {
@@ -131,18 +132,26 @@ export default function AdminPage() {
     }
   };
 
-  // AI로 이슈 제안 받기
-  const handleGenerateSuggestions = async () => {
+  // AI로 이슈 제안 받기 (키워드 기반)
+  const handleGenerateSuggestions = async (keyword?: string) => {
     setIsGenerating(true);
     setAiSuggestions([]);
     
     try {
-      // Add a timestamp to bust cache and seed the random generator
-      const res = await fetch(`/api/topics?seed=${Date.now()}`, { cache: "no-store" });
+      // 키워드가 있으면 추가
+      const params = new URLSearchParams({
+        seed: Date.now().toString(),
+        count: "6"
+      });
+      if (keyword?.trim()) {
+        params.set("keyword", keyword.trim());
+      }
+      
+      const res = await fetch(`/api/topics?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       
       // API는 배열을 직접 반환함
-        if (Array.isArray(data)) {
+      if (Array.isArray(data)) {
         const suggestions = data.map((t: any) => ({
           label: t.label || t.title || t,
           description: t.description || "",
@@ -306,36 +315,73 @@ export default function AdminPage() {
                 )}
                 이슈 추가
               </Button>
-              
+            </div>
+          </div>
+          
+          {/* AI 키워드 검색 섹션 */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded-xl border border-purple-500/30">
+            <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              AI 주제 추천
+            </h3>
+            
+            {/* 키워드 입력 */}
+            <div className="flex gap-2 mb-3">
+              <Input
+                value={aiKeyword}
+                onChange={(e) => setAiKeyword(e.target.value)}
+                placeholder="키워드 입력 (예: AI, 부동산, 교육...)"
+                className="bg-black/30 border-purple-500/30 placeholder:text-purple-300/50"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleGenerateSuggestions(aiKeyword);
+                  }
+                }}
+              />
               <Button 
                 variant="outline" 
-                onClick={handleGenerateSuggestions}
+                onClick={() => handleGenerateSuggestions(aiKeyword)}
                 disabled={isGenerating}
+                className="border-purple-500/50 hover:bg-purple-500/20 text-purple-200 min-w-[120px]"
               >
                 {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    {aiKeyword.trim() ? '검색' : '랜덤 추천'}
+                  </>
                 )}
-                AI 제안 받기
               </Button>
             </div>
+            
+            <p className="text-xs text-purple-400/70 mb-3">
+              키워드를 입력하면 관련 토론 주제를, 비워두면 랜덤 주제를 추천합니다.
+            </p>
           </div>
           
           {/* AI 제안 목록 */}
           {aiSuggestions.length > 0 && (
-            <div className="mt-4 p-4 bg-purple-900/30 rounded-lg border border-purple-500/30">
-              <h3 className="text-sm font-bold text-purple-300 mb-2">
-                🤖 AI 추천 토론 주제
-              </h3>
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-4">
+              <p className="text-xs text-purple-400 mb-2">
+                {aiKeyword ? `"🔍 ${aiKeyword}" 관련 주제` : '🎲 랜덤 추천 주제'}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {aiSuggestions.map((suggestion, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSelectSuggestion(suggestion)}
-                    className="px-3 py-2 text-sm bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 rounded-lg transition-colors text-left"
+                    className="p-3 text-sm bg-black/30 hover:bg-purple-500/20 text-left rounded-lg transition-colors border border-purple-500/20 hover:border-purple-500/40"
                   >
-                    <div className="font-medium">{suggestion.label}</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs px-2 py-0.5 rounded bg-purple-500/30 text-purple-300">
+                        {suggestion.category}
+                      </span>
+                    </div>
+                    <div className="font-medium text-white">{suggestion.label}</div>
+                    <div className="text-xs text-purple-300/70 mt-1 line-clamp-2">
+                      {suggestion.description}
+                    </div>
                   </button>
                 ))}
               </div>

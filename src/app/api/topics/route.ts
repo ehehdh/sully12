@@ -28,12 +28,39 @@ export async function GET(req: Request) {
     const seed = searchParams.get("seed") || Date.now().toString();
     const category = searchParams.get("category"); // 특정 카테고리 요청 가능
     const count = parseInt(searchParams.get("count") || "6"); // 개수 지정 가능
+    const keyword = searchParams.get("keyword"); // 키워드 검색
 
     // 랜덤 카테고리 2-3개 선택 (다양성 확보)
     const shuffledCategories = [...CATEGORIES].sort(() => Math.random() - 0.5);
     const selectedCategories = category ? [category] : shuffledCategories.slice(0, 3);
 
-    const prompt = `
+    // 키워드 기반 프롬프트 vs 일반 프롬프트
+    const prompt = keyword ? `
+당신은 한국의 시사 전문가입니다. 사용자가 입력한 키워드와 관련된 토론 주제를 추천해주세요.
+
+**사용자 키워드**: "${keyword}"
+
+요구사항:
+1. 키워드 "${keyword}"과 직접적으로 관련된 토론 주제를 ${count}개 생성하세요.
+2. 현재 한국 사회에서 논쟁이 되고 있거나, 될 수 있는 주제여야 합니다.
+3. 각 주제는 찬성/반대 양측의 논리가 명확히 존재해야 합니다.
+4. 키워드의 다양한 측면을 다루세요 (법적, 경제적, 사회적, 윤리적 등).
+5. 카테고리는 다음 중에서 가장 적합한 것을 선택하세요: ${CATEGORIES.join(', ')}
+
+Random Seed: ${seed}
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "topics": [
+    {
+      "label": "주제 제목 (15자 이내)",
+      "description": "핵심 쟁점 요약 (30자 이내)",
+      "detailed_description": "배경 설명. 찬성측 주장과 반대측 주장을 각각 포함. (100자 내외)",
+      "category": "카테고리"
+    }
+  ]
+}
+` : `
 당신은 한국의 시사 전문가입니다. 현재 한국에서 가장 논쟁이 되고 있는 토론 주제를 추천해주세요.
 
 요구사항:
