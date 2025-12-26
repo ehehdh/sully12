@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -16,20 +16,20 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { Shield, Search, Flame, Clock, Filter, X } from "lucide-react"
+import { Shield, Search, Flame, Clock, X } from "lucide-react"
 import { Issue } from "@/lib/database.types"
 import { UserAuthButton } from "@/components/auth/UserAuthButton"
 
-// 카테고리 색상 맵
-const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  '경제': { bg: 'from-green-500/20 to-emerald-500/10', border: 'border-green-500/30', text: 'text-green-400' },
-  '정치': { bg: 'from-blue-500/20 to-indigo-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
-  '사회': { bg: 'from-purple-500/20 to-violet-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
-  '법률': { bg: 'from-amber-500/20 to-yellow-500/10', border: 'border-amber-500/30', text: 'text-amber-400' },
-  '노동': { bg: 'from-orange-500/20 to-red-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
-  '환경': { bg: 'from-teal-500/20 to-cyan-500/10', border: 'border-teal-500/30', text: 'text-teal-400' },
-  '기술': { bg: 'from-pink-500/20 to-rose-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
-  '일반': { bg: 'from-gray-500/20 to-slate-500/10', border: 'border-gray-500/30', text: 'text-gray-400' },
+// 카테고리 색상 맵 - 더 깔끔한 버전
+const CATEGORY_COLORS: Record<string, { accent: string; badge: string }> = {
+  '경제': { accent: 'border-l-green-500', badge: 'bg-green-500/20 text-green-400' },
+  '정치': { accent: 'border-l-blue-500', badge: 'bg-blue-500/20 text-blue-400' },
+  '사회': { accent: 'border-l-purple-500', badge: 'bg-purple-500/20 text-purple-400' },
+  '법률': { accent: 'border-l-amber-500', badge: 'bg-amber-500/20 text-amber-400' },
+  '노동': { accent: 'border-l-orange-500', badge: 'bg-orange-500/20 text-orange-400' },
+  '환경': { accent: 'border-l-teal-500', badge: 'bg-teal-500/20 text-teal-400' },
+  '기술': { accent: 'border-l-pink-500', badge: 'bg-pink-500/20 text-pink-400' },
+  '일반': { accent: 'border-l-gray-500', badge: 'bg-gray-500/20 text-gray-400' },
 }
 
 // 카테고리 목록
@@ -44,13 +44,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [stance, setStance] = useState<"agree" | "neutral" | "disagree" | null>(null)
-  const [hoveredIssueId, setHoveredIssueId] = useState<string | null>(null)
   
   // 검색 & 필터 상태
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [sortBy, setSortBy] = useState<SortOption>('latest')
-  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     const fetchIssues = async () => {
@@ -202,8 +200,8 @@ export default function Home() {
           {/* 필터 & 정렬 */}
           <div className="flex items-center justify-between gap-4">
             {/* 카테고리 탭 */}
-            <div className="flex-1 overflow-x-auto scrollbar-hide">
-              <div className="flex gap-2 pb-1">
+            <div className="flex-1 overflow-x-auto scrollbar-thin">
+              <div className="flex gap-2 pb-2">
                 {CATEGORIES.map((category) => (
                   <button
                     key={category}
@@ -294,7 +292,6 @@ export default function Home() {
             animate="show"
             className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 px-4 md:px-0 pb-20"
           >
-            {/* Mapped Issues */}
             {filteredIssues.map((issue) => {
               const categoryStyle = getCategoryStyle(issue.category)
               
@@ -302,9 +299,7 @@ export default function Home() {
                 <motion.div 
                   key={issue.id} 
                   variants={itemVariants}
-                  className="relative"
-                  onMouseEnter={() => setHoveredIssueId(issue.id)}
-                  onMouseLeave={() => setHoveredIssueId(null)}
+                  className="relative group"
                 >
                   <Dialog>
                     <DialogTrigger asChild>
@@ -314,72 +309,42 @@ export default function Home() {
                           setStance(null)
                         }}
                         className={cn(
-                          "group relative h-56 p-6 rounded-2xl border backdrop-blur-md transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between",
-                          "bg-gradient-to-br",
-                          categoryStyle.bg,
-                          categoryStyle.border,
-                          "hover:border-white/30 hover:shadow-xl hover:shadow-white/5 hover:-translate-y-1"
+                          "relative p-5 rounded-xl cursor-pointer transition-all duration-200",
+                          "bg-[#12121a] border border-white/10",
+                          "hover:bg-[#1a1a24] hover:border-white/20 hover:shadow-lg hover:shadow-black/20",
+                          "border-l-4",
+                          categoryStyle.accent
                         )}
                       >
-                        {/* 글래스 효과 오버레이 */}
-                        <div className="absolute inset-0 bg-black/40 rounded-2xl" />
-                        
-                        {/* Category Badge */}
-                        <div className="relative z-10">
+                        {/* Header: Category + Date */}
+                        <div className="flex items-center justify-between mb-3">
                           <span className={cn(
-                            "text-xs font-semibold px-3 py-1.5 rounded-full bg-black/50 border",
-                            categoryStyle.border,
-                            categoryStyle.text
+                            "text-xs font-medium px-2.5 py-1 rounded-md",
+                            categoryStyle.badge
                           )}>
                             {issue.category}
                           </span>
-                        </div>
-
-                        {/* Main Content */}
-                        <div className="relative z-10 flex-1 flex flex-col justify-center">
-                          <h3 className="text-xl font-bold text-white mb-2 line-clamp-2 break-keep">
-                            {issue.title}
-                          </h3>
-                          <p className="text-sm text-white/60 line-clamp-2">
-                            {issue.description}
-                          </p>
-                        </div>
-
-                        {/* Bottom */}
-                        <div className="relative z-10 flex items-center justify-between">
-                          <span className="text-xs text-white/40">
+                          <span className="text-xs text-white/30">
                             {new Date(issue.created_at).toLocaleDateString('ko-KR')}
                           </span>
-                          <span className="text-white text-lg opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 transition-all duration-300">
-                            →
-                          </span>
                         </div>
 
-                        {/* Hover Overlay - Detailed Description */}
-                        <AnimatePresence>
-                          {hoveredIssueId === issue.id && (
-                            <motion.div 
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              className="absolute inset-0 p-6 flex flex-col justify-center items-center text-center z-20 bg-black/90 rounded-2xl"
-                            >
-                              <motion.div
-                                initial={{ y: 10, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                transition={{ delay: 0.05 }}
-                              >
-                                <h4 className="font-bold text-white mb-3 text-lg">{issue.title}</h4>
-                                <p className="text-sm text-gray-300 leading-relaxed break-keep">
-                                  {issue.detailed_description || issue.description}
-                                </p>
-                                <p className={cn("text-xs mt-4 font-bold", categoryStyle.text)}>
-                                  클릭하여 토론 참여하기
-                                </p>
-                              </motion.div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                        {/* Title */}
+                        <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 break-keep leading-snug">
+                          {issue.title}
+                        </h3>
+                        
+                        {/* Description */}
+                        <p className="text-sm text-white/50 line-clamp-2 leading-relaxed">
+                          {issue.description}
+                        </p>
+
+                        {/* Arrow indicator */}
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 group-hover:text-white/60 transition-colors">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
                       </div>
                     </DialogTrigger>
                   
