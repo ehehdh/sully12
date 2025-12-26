@@ -107,10 +107,11 @@ ${newsItems.slice(0, 5).map((item, i) =>
 ${newsContext || `"${keyword}" 관련 최신 이슈를 바탕으로 토론 주제를 생성하세요.`}
 
 요구사항:
-1. "${keyword}" 키워드와 직접 관련된 토론 주제만 ${count}개 생성하세요.
+1. "${keyword}" 키워드와 직접 관련된 토론 주제를 ${count}개 생성하세요.
 2. 주제 제목에 "${keyword}" 또는 관련 용어가 반드시 포함되어야 합니다.
 3. 각 주제는 찬성/반대가 가능해야 합니다.
 4. 카테고리: ${CATEGORIES.join(', ')} 중 선택
+5. [중요] 각 주제는 서로 다른 관점/쟁점을 다루어야 합니다. 중복되거나 유사한 주제를 생성하지 마세요.
 
 JSON 형식으로만 응답:
 {
@@ -184,6 +185,17 @@ Random Seed: ${seed}
       detailed_description: topic.detailed_description || topic.description || '',
       category: CATEGORIES.includes(topic.category) ? topic.category : '일반',
     }));
+
+    // 중복 제거 (제목 기준)
+    const seenLabels = new Set<string>();
+    list = list.filter(topic => {
+      const normalizedLabel = topic.label.replace(/\s+/g, '').toLowerCase();
+      if (seenLabels.has(normalizedLabel)) {
+        return false;
+      }
+      seenLabels.add(normalizedLabel);
+      return true;
+    });
 
     if (list.length === 0) {
       throw new Error("No topics generated");
