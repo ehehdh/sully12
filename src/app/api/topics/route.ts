@@ -77,12 +77,19 @@ export async function GET(req: Request) {
     const keyword = searchParams.get("keyword");
 
     let newsContext = "";
+    let newsLinks: { title: string; link: string }[] = [];
     
     // 키워드가 있으면 네이버 뉴스 검색
     if (keyword?.trim()) {
       const newsItems = await searchNaverNews(keyword.trim());
       
       if (newsItems.length > 0) {
+        // 뉴스 링크 저장
+        newsLinks = newsItems.slice(0, 5).map(item => ({
+          title: stripHtml(item.title),
+          link: item.link
+        }));
+        
         newsContext = `
 아래는 "${keyword}" 관련 최신 뉴스 기사들입니다:
 
@@ -209,7 +216,11 @@ Random Seed: ${seed}
       throw new Error("No topics generated");
     }
 
-    return NextResponse.json(list);
+    // 응답에 뉴스 링크 포함
+    return NextResponse.json({
+      topics: list,
+      sources: newsLinks
+    });
   } catch (error) {
     console.error("Failed to fetch topics:", error);
     

@@ -49,6 +49,7 @@ export default function AdminPage() {
   // AI 제안
   const [aiSuggestions, setAiSuggestions] = useState<{label: string; description: string; detailed_description?: string; category?: string}[]>([]);
   const [aiKeyword, setAiKeyword] = useState(""); // AI 키워드 검색
+  const [newsSources, setNewsSources] = useState<{title: string; link: string}[]>([]); // 뉴스 소스
 
   // 이슈 목록 로드
   const fetchIssues = useCallback(async () => {
@@ -136,6 +137,7 @@ export default function AdminPage() {
   const handleGenerateSuggestions = async (keyword?: string) => {
     setIsGenerating(true);
     setAiSuggestions([]);
+    setNewsSources([]);
     
     try {
       // 키워드가 있으면 추가
@@ -150,17 +152,23 @@ export default function AdminPage() {
       const res = await fetch(`/api/topics?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       
-      // API는 배열을 직접 반환함
-      if (Array.isArray(data)) {
-        const suggestions = data.map((t: any) => ({
+      // 새로운 API 응답 형식 (topics + sources)
+      if (data.topics && Array.isArray(data.topics)) {
+        const suggestions = data.topics.map((t: any) => ({
           label: t.label || t.title || t,
           description: t.description || "",
           detailed_description: t.detailed_description || t.description || "",
           category: t.category || "일반"
         }));
         setAiSuggestions(suggestions);
-      } else if (data.topics && Array.isArray(data.topics)) {
-        const suggestions = data.topics.map((t: any) => ({
+        
+        // 뉴스 소스 저장
+        if (data.sources && Array.isArray(data.sources)) {
+          setNewsSources(data.sources);
+        }
+      } else if (Array.isArray(data)) {
+        // 기존 API 형식 (배열 직접 반환)
+        const suggestions = data.map((t: any) => ({
           label: t.label || t.title || t,
           description: t.description || "",
           detailed_description: t.detailed_description || t.description || "",
@@ -385,6 +393,27 @@ export default function AdminPage() {
                   </button>
                 ))}
               </div>
+              
+              {/* 뉴스 소스 링크 */}
+              {newsSources.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-purple-500/20">
+                  <p className="text-xs text-purple-400/70 mb-2">📰 참고 뉴스</p>
+                  <div className="flex flex-wrap gap-2">
+                    {newsSources.map((source, idx) => (
+                      <a
+                        key={idx}
+                        href={source.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-purple-300/60 hover:text-purple-200 underline decoration-purple-500/30 hover:decoration-purple-400 truncate max-w-[250px]"
+                        title={source.title}
+                      >
+                        {source.title}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
