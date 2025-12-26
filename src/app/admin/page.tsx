@@ -183,6 +183,25 @@ export default function AdminPage() {
           </Button>
         </header>
 
+        {/* 퀵 링크 */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+          <Link href="/admin/debates" className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl hover:bg-yellow-500/20 transition-colors">
+            <div className="text-2xl mb-2">🏆</div>
+            <h3 className="font-bold">토론 기록</h3>
+            <p className="text-xs text-muted-foreground">완료된 토론 관리</p>
+          </Link>
+          <Link href="/admin" className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl hover:bg-blue-500/20 transition-colors">
+            <div className="text-2xl mb-2">📋</div>
+            <h3 className="font-bold">이슈 관리</h3>
+            <p className="text-xs text-muted-foreground">토론 주제 관리</p>
+          </Link>
+          <Link href="/" className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl hover:bg-purple-500/20 transition-colors">
+            <div className="text-2xl mb-2">🏠</div>
+            <h3 className="font-bold">메인 페이지</h3>
+            <p className="text-xs text-muted-foreground">사용자 화면 확인</p>
+          </Link>
+        </div>
+
         {/* 새 이슈 추가 섹션 */}
         <section className="mb-8 p-6 bg-card/50 backdrop-blur-md rounded-xl border border-white/10">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">

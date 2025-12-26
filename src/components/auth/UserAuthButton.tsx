@@ -59,6 +59,15 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
                 )}
               </div>
               
+              <a
+                href="/mypage"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-white hover:bg-white/10 transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <UserIcon className="w-4 h-4" />
+                마이페이지
+              </a>
+              
               <button
                 onClick={() => {
                   setIsOpen(false);

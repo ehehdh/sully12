@@ -226,6 +226,17 @@ export async function POST(
                   // 즉시 Ended로 전환
                   const { room: endedRoom } = await updateRoomStageDB(params.roomId, 'ended', DEBATE_STAGES['ended'].aiIntroMessage);
                   Object.assign(room, endedRoom);
+                  
+                  // 🗄️ 토론 기록 아카이브
+                  try {
+                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/debates/archive`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ roomId: params.roomId })
+                    });
+                  } catch (archiveError) {
+                    console.error('Archive error:', archiveError);
+                  }
               }
            }
         }
