@@ -84,34 +84,41 @@ export async function GET(req: Request) {
       
       if (newsItems.length > 0) {
         newsContext = `
-**최신 뉴스 (${keyword} 관련):**
+아래는 "${keyword}" 검색 결과로 나온 최신 뉴스입니다. 반드시 이 뉴스 내용을 바탕으로 토론 주제를 만드세요:
+
 ${newsItems.slice(0, 5).map((item, i) => 
-  `${i + 1}. ${stripHtml(item.title)}: ${stripHtml(item.description)}`
+  `뉴스${i + 1}: ${stripHtml(item.title)} - ${stripHtml(item.description)}`
 ).join('\n')}
 `;
+        console.log("News context:", newsContext);
+      } else {
+        console.log("No news found for keyword:", keyword);
       }
     }
 
     // 키워드 기반 프롬프트 (뉴스 컨텍스트 포함)
     const prompt = keyword ? `
-당신은 한국의 시사 전문가입니다. 사용자가 입력한 키워드와 관련된 토론 주제를 추천해주세요.
+당신은 한국의 시사 전문가입니다.
 
-**사용자 키워드**: "${keyword}"
-${newsContext}
+[중요] 사용자가 "${keyword}" 키워드로 검색했습니다. 
+모든 토론 주제는 반드시 "${keyword}"와 직접적으로 관련되어야 합니다.
+"${keyword}"와 관련 없는 주제는 절대 생성하지 마세요.
+
+${newsContext || `"${keyword}" 관련 최신 이슈를 바탕으로 토론 주제를 생성하세요.`}
 
 요구사항:
-1. 위 최신 뉴스 내용을 참고하여 "${keyword}" 키워드와 직접 관련된 토론 주제 ${count}개를 생성하세요.
-2. 뉴스에서 언급된 실제 이슈를 바탕으로 구체적인 토론 주제를 만드세요.
-3. 각 주제는 찬성/반대 양측의 논리가 명확히 존재해야 합니다.
-4. 카테고리는 다음 중에서 선택하세요: ${CATEGORIES.join(', ')}
+1. "${keyword}" 키워드와 직접 관련된 토론 주제만 ${count}개 생성하세요.
+2. 주제 제목에 "${keyword}" 또는 관련 용어가 반드시 포함되어야 합니다.
+3. 각 주제는 찬성/반대가 가능해야 합니다.
+4. 카테고리: ${CATEGORIES.join(', ')} 중 선택
 
-반드시 아래 JSON 형식으로만 응답하세요:
+JSON 형식으로만 응답:
 {
   "topics": [
     {
-      "label": "주제 제목 (15자 이내)",
-      "description": "핵심 쟁점 요약 (30자 이내)",
-      "detailed_description": "배경 설명. 찬성측 주장과 반대측 주장 포함 (100자 내외)",
+      "label": "주제 제목 (${keyword} 관련, 15자 이내)",
+      "description": "핵심 쟁점 (30자 이내)",
+      "detailed_description": "찬성/반대 논리 포함 (100자)",
       "category": "카테고리"
     }
   ]
