@@ -184,11 +184,21 @@ export default function AdminPage() {
         </header>
 
         {/* 퀵 링크 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
           <Link href="/admin/debates" className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl hover:bg-yellow-500/20 transition-colors">
             <div className="text-2xl mb-2">🏆</div>
             <h3 className="font-bold">토론 기록</h3>
             <p className="text-xs text-muted-foreground">완료된 토론 관리</p>
+          </Link>
+          <Link href="/admin/users" className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl hover:bg-green-500/20 transition-colors">
+            <div className="text-2xl mb-2">👥</div>
+            <h3 className="font-bold">사용자 관리</h3>
+            <p className="text-xs text-muted-foreground">회원 정보 및 제재</p>
+          </Link>
+          <Link href="/admin/reports" className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-colors">
+            <div className="text-2xl mb-2">🚨</div>
+            <h3 className="font-bold">신고 관리</h3>
+            <p className="text-xs text-muted-foreground">유저 신고 처리</p>
           </Link>
           <Link href="/admin" className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl hover:bg-blue-500/20 transition-colors">
             <div className="text-2xl mb-2">📋</div>

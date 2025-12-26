@@ -110,6 +110,7 @@ export function useRealtimeDebate(roomId: string | null) {
         const participants: Participant[] = users.map((u) => ({
           id: u.id,
           room_id: roomId,
+          user_id: u.userId || null,
           user_name: u.userName,
           stance: u.stance,
           role: u.role || 'observer',

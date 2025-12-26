@@ -91,6 +91,7 @@ export interface Database {
         Row: {
           id: string;
           room_id: string;
+          user_id: string | null;
           user_name: string;
           stance: Stance;
           role: 'host' | 'opponent' | 'observer';

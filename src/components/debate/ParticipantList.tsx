@@ -4,11 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { User, Wifi, WifiOff, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Participant } from "@/lib/database.types";
+import { ReportUserButton } from "@/components/report/ReportUserButton";
 
 interface ParticipantListProps {
   participants: Participant[];
   typingUsers: string[];
   myName?: string;
+  myUserId?: string;
+  roomId?: string;
   className?: string;
 }
 
@@ -16,6 +19,8 @@ export function ParticipantList({
   participants,
   typingUsers,
   myName,
+  myUserId,
+  roomId,
   className,
 }: ParticipantListProps) {
   const getStanceColor = (stance: string) => {
@@ -106,6 +111,15 @@ export function ParticipantList({
                     </span>
                   </div>
                 </div>
+
+                {/* 신고 버튼 (자신이 아닌 경우만) */}
+                {!isMe && participant.user_id && (
+                  <ReportUserButton
+                    targetUserId={participant.user_id}
+                    targetUserName={participant.user_name}
+                    roomId={roomId}
+                  />
+                )}
 
                 {/* 연결 상태 */}
                 <div className="flex-shrink-0">
