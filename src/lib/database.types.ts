@@ -201,6 +201,38 @@ export interface Database {
           updated_at?: string;
         };
       };
+      users: {
+        Row: {
+          id: string;
+          kakao_id: string;
+          email: string | null;
+          nickname: string;
+          profile_image: string | null;
+          role: 'user' | 'moderator' | 'admin';
+          created_at: string;
+          last_login_at: string;
+        };
+        Insert: {
+          id?: string;
+          kakao_id: string;
+          email?: string | null;
+          nickname: string;
+          profile_image?: string | null;
+          role?: 'user' | 'moderator' | 'admin';
+          created_at?: string;
+          last_login_at?: string;
+        };
+        Update: {
+          id?: string;
+          kakao_id?: string;
+          email?: string | null;
+          nickname?: string;
+          profile_image?: string | null;
+          role?: 'user' | 'moderator' | 'admin';
+          created_at?: string;
+          last_login_at?: string;
+        };
+      };
     };
   };
 }

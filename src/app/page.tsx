@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { Shield, Sparkles } from "lucide-react"
+import { Shield } from "lucide-react"
 import { Issue } from "@/lib/database.types"
+import { UserAuthButton } from "@/components/auth/UserAuthButton"
 
 // Extended type for UI state if needed, but Issue from DB is fine.
 // We might map it to ensure fields exist.
@@ -79,14 +80,17 @@ export default function Home() {
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -z-10 animate-pulse duration-[5000ms]" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl -z-10 animate-pulse duration-[7000ms]" />
       
-      {/* Admin Link */}
-      <Link 
-        href="/admin" 
-        className="absolute top-4 right-4 flex items-center gap-2 text-xs text-muted-foreground/50 hover:text-white transition-colors z-50"
-      >
-        <Shield className="w-3 h-3" />
-        관리자
-      </Link>
+      {/* Top Navigation */}
+      <div className="absolute top-4 right-4 flex items-center gap-4 z-50">
+        <Link 
+          href="/admin" 
+          className="flex items-center gap-2 text-xs text-muted-foreground/50 hover:text-white transition-colors"
+        >
+          <Shield className="w-3 h-3" />
+          관리자
+        </Link>
+        <UserAuthButton />
+      </div>
       
       <div className="max-w-6xl w-full flex flex-col items-center mt-12 md:mt-20">
         {/* Header Section */}

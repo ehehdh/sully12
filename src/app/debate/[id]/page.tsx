@@ -9,7 +9,7 @@ import { ParticipantList } from "@/components/debate/ParticipantList";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users, Wifi, WifiOff, SkipForward, LogOut } from "lucide-react";
 import Link from "next/link";
-import { useAppStore } from "@/lib/useAppStore";
+import { useAuth } from "@/lib/useAuth";
 import { DebateStage, Participant, DebateSettings } from "@/lib/database.types";
 import { DEBATE_STAGES, getNextStage } from "@/lib/debateStages";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,8 @@ function DebateContent() {
   const stanceLabel =
     userStance === "agree" ? "찬성" : userStance === "disagree" ? "반대" : "중립";
 
-  const user = useAppStore((state) => state.user);
-  const typingUsers = useAppStore((state) => state.typingUsers);
+  // 카카오 로그인 사용자 정보
+  const { user, isAuthenticated } = useAuth();
 
   // 세션 ID (탭마다 고유)
   const [sessionId, setSessionId] = useState<string>("");
@@ -76,8 +76,8 @@ function DebateContent() {
     }
     
     try {
-      // 사용자 이름이 없으면 세션 스토리지에서 가져오거나 생성
-      let userName = user?.name;
+      // 로그인 사용자의 닉네임 사용 (없으면 익명)
+      let userName = user?.nickname;
       if (!userName) {
         const STORAGE_KEY = `debate_anon_name_${issueId}`;
         let storedName = sessionStorage.getItem(STORAGE_KEY);
@@ -256,7 +256,7 @@ function DebateContent() {
       const participants = Array.isArray(data.participants) ? data.participants : [];
       
       // 내 참가자 정보 찾기 (session_id 또는 이름으로)
-      const currentUserName = myNameRef.current || myName || user?.name || "";
+      const currentUserName = myNameRef.current || myName || user?.nickname || "";
       let myParticipant = participants.find((p: any) => p.user_name === currentUserName);
       
       // 이름으로 못 찾으면 role로 찾기 (내가 저장한 myRole 사용)
@@ -425,7 +425,7 @@ function DebateContent() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       // 발신자 이름 (myNameRef 우선 사용)
-      const senderName = myNameRef.current || myName || user?.name || "익명";
+      const senderName = myNameRef.current || myName || user?.nickname || "익명";
       
       // 즉시 UI 업데이트 (pendingMessages 사용) - session_id 포함!
       const optimisticMessage: Message = {
@@ -494,7 +494,7 @@ function DebateContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             claim,
-            senderName: user?.name || "익명",
+            senderName: user?.nickname || "익명",
           }),
         });
 
@@ -840,13 +840,13 @@ function DebateContent() {
             );
           })()}
           onSendMessage={handleSendMessage}
-          typingUsers={typingUsers}
+          typingUsers={[]}
           disabled={isInputDisabled}
           stage={stage}
           turnMessage={turnMessage}
           isMyTurn={isMyTurn}
           onFactCheck={handleFactCheck}
-          myName={myNameRef.current || myName || user?.name || "익명의 토론자"}
+          myName={myNameRef.current || myName || user?.nickname || "익명의 토론자"}
           mySessionId={sessionId || ""}
           timeLeft={timeLeft}
         />
@@ -857,8 +857,8 @@ function DebateContent() {
         {/* 참가자 목록 */}
         <ParticipantList
           participants={participants}
-          typingUsers={typingUsers}
-          myName={user?.name}
+          typingUsers={[]}
+          myName={user?.nickname}
         />
 
         {/* 단계 진행 표시 */}

@@ -18,7 +18,7 @@ import {
 import { ArrowLeft, Plus, Users } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { useAppStore } from "@/lib/useAppStore"
+import { useAuth } from "@/lib/useAuth"
 import { DebateSettings } from "@/lib/database.types"
 
 type Room = {
@@ -39,7 +39,9 @@ export default function LobbyPage() {
   const topicId = params.topicId as string
   const userStance = searchParams.get("stance") as "agree" | "disagree" | "neutral"
   
-  const user = useAppStore((state) => state.user)
+  // 카카오 로그인 사용자 정보 사용
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
+  
   const [rooms, setRooms] = useState<Room[]>([])
   const [topicTitle, setTopicTitle] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -114,7 +116,13 @@ export default function LobbyPage() {
   }
 
   const submitCreateRoom = async () => {
-    const userName = user?.name || "익명의 토론자"
+    // 로그인 확인
+    if (!isAuthenticated || !user) {
+      router.push('/login')
+      return
+    }
+    
+    const userName = user.nickname
     
     try {
       const res = await fetch("/api/rooms", {
@@ -137,6 +145,11 @@ export default function LobbyPage() {
   }
 
   const handleJoinRoom = (roomId: string) => {
+    // 로그인 확인
+    if (!isAuthenticated || !user) {
+      router.push('/login')
+      return
+    }
     router.push(`/debate/${roomId}?stance=${userStance}&isMulti=true`)
   }
 
