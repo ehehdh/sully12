@@ -59,14 +59,34 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 사용자 정보 업데이트
+    // 사용자 정보 업데이트 - 먼저 is_onboarding_complete 컬럼 존재 여부 확인
+    // 컬럼이 없을 수 있으므로 nickname만 먼저 업데이트 시도
+    let updateData: Record<string, unknown> = {
+      nickname: trimmedNickname,
+    };
+
+    // is_onboarding_complete 컬럼이 있으면 추가
+    try {
+      const { data: checkColumn } = await supabase
+        .from('users')
+        .select('is_onboarding_complete')
+        .eq('id', sessionData.userId)
+        .single();
+      
+      if (checkColumn !== null && 'is_onboarding_complete' in checkColumn) {
+        updateData = {
+          ...updateData,
+          is_onboarding_complete: true,
+        };
+      }
+    } catch {
+      // 컬럼이 없으면 무시
+      console.log('is_onboarding_complete column may not exist, skipping');
+    }
+
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
-      .update({
-        nickname: trimmedNickname,
-        is_onboarding_complete: true,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', sessionData.userId)
       .select()
       .single();
