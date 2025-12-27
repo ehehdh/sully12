@@ -87,7 +87,7 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
 }
 
 export function UserAuthButton() {
-  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
 
   if (isLoading) {
     return (
@@ -97,23 +97,14 @@ export function UserAuthButton() {
 
   if (!isAuthenticated || !user) {
     return (
-      <motion.button
-        onClick={login}
+      <motion.a
+        href="/login"
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        className="flex items-center gap-2 px-4 py-2 bg-[#FEE500] hover:bg-[#FDD835] text-[#181600] font-semibold rounded-full text-sm transition-all shadow-lg"
+        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-full text-sm transition-all shadow-lg"
       >
-        {/* Kakao Icon */}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M12 2C6.477 2 2 5.582 2 10.015c0 2.818 1.786 5.291 4.475 6.724l-1.136 4.138a.38.38 0 00.576.421l4.877-3.225c.394.037.795.056 1.208.056 5.523 0 10-3.582 10-8.015C22 5.582 17.523 2 12 2z"
-            fill="#181600"
-          />
-        </svg>
         로그인
-      </motion.button>
+      </motion.a>
     );
   }
 

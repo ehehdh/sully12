@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, kakao_id, nickname, profile_image, email, role, created_at')
+      .select('id, kakao_id, google_id, nickname, profile_image, email, role, created_at, is_onboarding_complete')
       .eq('id', sessionData.userId)
       .single();
 
@@ -58,11 +58,13 @@ export async function GET(request: NextRequest) {
       user: {
         id: user.id,
         kakaoId: user.kakao_id,
+        googleId: user.google_id,
         nickname: user.nickname,
         profileImage: user.profile_image,
         email: user.email,
         role: user.role,
         createdAt: user.created_at,
+        isOnboardingComplete: user.is_onboarding_complete ?? true,
       }
     });
 

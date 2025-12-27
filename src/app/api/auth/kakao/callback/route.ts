@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
                          null;
     const email = userData.kakao_account?.email || null;
 
-    // 4. Supabase에 사용자 저장/업데이트 (타입 없이 사용)
+    // 4. Supabase에 사용자 저장/업데이트
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
@@ -127,22 +127,82 @@ export async function GET(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let userId: string;
+    let needsOnboarding = false;
+
+    // 5. 이메일로 기존 계정 확인 (이메일이 있는 경우만)
+    if (email) {
+      const { data: existingUserByEmail } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (existingUserByEmail) {
+        // 이메일로 기존 계정 존재
+        if (existingUserByEmail.kakao_id === kakaoId) {
+          // 이미 카카오 연동된 계정 - 로그인
+          userId = existingUserByEmail.id;
+          needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+          
+          // 마지막 로그인 시간 업데이트
+          await supabase
+            .from('users')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', userId);
+            
+        } else if (existingUserByEmail.kakao_id === null && existingUserByEmail.google_id) {
+          // 구글로 가입된 계정 - 에러
+          return NextResponse.redirect(
+            new URL('/login?error=email_exists&provider=구글', request.url)
+          );
+        } else if (existingUserByEmail.kakao_id === null) {
+          // 카카오 ID 연동
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ 
+              kakao_id: kakaoId,
+              last_login_at: new Date().toISOString()
+            })
+            .eq('id', existingUserByEmail.id);
+            
+          if (updateError) {
+            console.error('Update error:', updateError);
+            return NextResponse.redirect(new URL('/login?error=db_error', request.url));
+          }
+          
+          userId = existingUserByEmail.id;
+          needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+        } else {
+          // 다른 카카오 계정으로 연동됨
+          userId = existingUserByEmail.id;
+          needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+        }
+        
+        // 세션 생성 및 리다이렉트
+        return createSessionAndRedirect(request, {
+          userId,
+          kakaoId,
+          nickname: existingUserByEmail.nickname || nickname,
+          profileImage: existingUserByEmail.profile_image || profileImage,
+          needsOnboarding
+        });
+      }
+    }
+
+    // 6. 카카오 ID로 기존 계정 확인
     const { data: existingUser } = await supabase
       .from('users')
       .select('*')
       .eq('kakao_id', kakaoId)
       .single();
 
-    let userId: string;
-
     if (existingUser) {
       // 기존 사용자 - 정보 업데이트
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
         .update({
-          nickname,
+          nickname: existingUser.nickname || nickname, // 기존 닉네임 유지
           profile_image: profileImage,
           email,
           last_login_at: new Date().toISOString(),
@@ -155,10 +215,11 @@ export async function GET(request: NextRequest) {
         console.error('User update error:', updateError);
         return NextResponse.redirect(new URL('/login?error=db_error', request.url));
       }
+      
       userId = updatedUser.id;
+      needsOnboarding = !updatedUser.is_onboarding_complete;
     } else {
       // 새 사용자 생성
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: newUser, error: createError } = await supabase
         .from('users')
         .insert({
@@ -166,6 +227,7 @@ export async function GET(request: NextRequest) {
           nickname,
           profile_image: profileImage,
           email,
+          is_onboarding_complete: false,
         })
         .select()
         .single();
@@ -174,36 +236,62 @@ export async function GET(request: NextRequest) {
         console.error('User creation error:', createError);
         return NextResponse.redirect(new URL('/login?error=db_error', request.url));
       }
+      
       userId = newUser.id;
+      needsOnboarding = true;
     }
 
-    // 5. 세션 쿠키 생성 (간단한 JWT 대신 서명된 쿠키 사용)
-    const sessionData = {
+    // 7. 세션 생성 및 리다이렉트
+    return createSessionAndRedirect(request, {
       userId,
       kakaoId,
       nickname,
       profileImage,
-      expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7일
-    };
-
-    // Base64로 인코딩 (프로덕션에서는 JWT 사용 권장)
-    const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
-
-    // 6. 쿠키 설정 및 홈으로 리다이렉트
-    const response = NextResponse.redirect(new URL('/', request.url));
-    
-    response.cookies.set('politi-log-session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7일
-      path: '/',
+      needsOnboarding
     });
-
-    return response;
 
   } catch (err) {
     console.error('Kakao callback error:', err);
     return NextResponse.redirect(new URL('/login?error=unknown', request.url));
   }
 }
+
+// 세션 생성 및 리다이렉트 헬퍼 함수
+function createSessionAndRedirect(
+  request: NextRequest,
+  data: {
+    userId: string;
+    kakaoId: string;
+    nickname: string;
+    profileImage: string | null;
+    needsOnboarding: boolean;
+  }
+) {
+  const { userId, kakaoId, nickname, profileImage, needsOnboarding } = data;
+  
+  // 세션 쿠키 생성
+  const sessionData = {
+    userId,
+    kakaoId,
+    nickname,
+    profileImage,
+    expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7일
+  };
+
+  const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
+
+  // 쿠키 설정 및 리다이렉트
+  const redirectUrl = needsOnboarding ? '/onboarding' : '/';
+  const response = NextResponse.redirect(new URL(redirectUrl, request.url));
+  
+  response.cookies.set('politi-log-session', sessionToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60,
+    path: '/',
+  });
+
+  return response;
+}
+

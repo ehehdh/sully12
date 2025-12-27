@@ -5,12 +5,14 @@ import { useState, useEffect, useCallback, createContext, useContext, ReactNode 
 // 사용자 타입 정의
 export interface User {
   id: string;
-  kakaoId: string;
+  kakaoId?: string;
+  googleId?: string;
   nickname: string;
   profileImage: string | null;
   email: string | null;
   role: 'user' | 'moderator' | 'admin';
   createdAt: string;
+  isOnboardingComplete: boolean;
 }
 
 // 인증 상태 타입
@@ -23,7 +25,8 @@ interface AuthState {
 
 // 인증 컨텍스트 타입
 interface AuthContextType extends AuthState {
-  login: () => void;
+  loginWithKakao: () => void;
+  loginWithGoogle: () => void;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -84,8 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   // 카카오 로그인
-  const login = useCallback(() => {
+  const loginWithKakao = useCallback(() => {
     window.location.href = '/api/auth/kakao';
+  }, []);
+
+  // 구글 로그인
+  const loginWithGoogle = useCallback(() => {
+    window.location.href = '/api/auth/google';
   }, []);
 
   // 로그아웃
@@ -118,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     ...state,
-    login,
+    loginWithKakao,
+    loginWithGoogle,
     logout,
     refresh,
   };

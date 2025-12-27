@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { KakaoLoginButton } from '@/components/auth/KakaoLoginButton';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 import { useAuth } from '@/lib/useAuth';
 import { ArrowLeft } from 'lucide-react';
 import { Suspense } from 'react';
@@ -13,6 +14,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
   const errorMsg = searchParams.get('msg'); // 상세 에러 메시지
+  const provider = searchParams.get('provider'); // 기존 가입 방법
   const { isAuthenticated, isLoading } = useAuth();
 
   // 이미 로그인되어 있으면 홈으로 리다이렉트
@@ -26,6 +28,8 @@ function LoginContent() {
     switch (errorCode) {
       case 'kakao_auth_failed':
         return '카카오 로그인이 취소되었거나 실패했습니다.';
+      case 'google_auth_failed':
+        return '구글 로그인이 취소되었거나 실패했습니다.';
       case 'token_failed':
         return '인증 토큰을 받아오는데 실패했습니다.';
       case 'user_info_failed':
@@ -36,6 +40,8 @@ function LoginContent() {
         return '인증 코드가 없습니다.';
       case 'config_error':
         return '서버 설정에 문제가 있습니다.';
+      case 'email_exists':
+        return `이미 ${provider || '다른 방법'}으로 가입된 이메일입니다. ${provider || '해당 방법'}으로 로그인해주세요.`;
       default:
         return null;
     }
@@ -104,8 +110,11 @@ function LoginContent() {
             </motion.div>
           )}
 
-          {/* Kakao Login Button */}
-          <KakaoLoginButton fullWidth size="lg" />
+          {/* Social Login Buttons */}
+          <div className="space-y-3">
+            <KakaoLoginButton fullWidth size="lg" />
+            <GoogleLoginButton fullWidth size="lg" />
+          </div>
 
           {/* Divider */}
           <div className="relative my-8">
