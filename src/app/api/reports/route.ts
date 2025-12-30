@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getUserSession } from '@/lib/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/reports
  * 신고 접수 (사용자가 다른 사용자를 신고) - JWT 인증

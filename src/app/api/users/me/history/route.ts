@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getUserSession } from '@/lib/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/users/me/history
  * 현재 로그인한 사용자의 토론 기록 조회 (JWT 인증)

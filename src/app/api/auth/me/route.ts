@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getUserSession, USER_SESSION_COOKIE } from '@/lib/session';
 
+// 이 라우트는 쿠키를 사용하므로 항상 동적으로 실행되어야 함
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/me
  * 현재 로그인된 사용자 정보 반환 (JWT 기반)

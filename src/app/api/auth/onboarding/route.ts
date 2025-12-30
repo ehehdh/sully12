@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getUserSession, createUserSession, USER_SESSION_COOKIE } from '@/lib/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/auth/onboarding
  * 온보딩 완료 - 닉네임 저장 (JWT 인증)

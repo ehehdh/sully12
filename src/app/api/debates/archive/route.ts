@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getUserSession, getAdminSession } from '@/lib/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/debates/archive
  * 토론 종료 시 기록을 아카이브 (인증 필요)
