@@ -132,13 +132,13 @@ function LoginContent() {
           <div className="text-center text-xs text-muted-foreground/70 space-y-2">
             <p>
               로그인 시{' '}
-              <span className="text-white/80 underline cursor-pointer">
+              <Link href="/terms" className="text-white/80 underline">
                 이용약관
-              </span>
+              </Link>
               {' '}및{' '}
-              <span className="text-white/80 underline cursor-pointer">
+              <Link href="/privacy" className="text-white/80 underline">
                 개인정보처리방침
-              </span>
+              </Link>
               에 동의하게 됩니다.
             </p>
           </div>

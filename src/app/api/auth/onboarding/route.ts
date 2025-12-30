@@ -19,7 +19,16 @@ export async function POST(request: NextRequest) {
   try {
     // 요청 바디 파싱
     const body = await request.json();
-    const { nickname } = body;
+    const { 
+      nickname, 
+      gender, 
+      birthDate, 
+      region, 
+      agreedTerms, 
+      agreedPrivacy,
+      agreedMarketing = false,
+      isUnder14Confirmed 
+    } = body;
 
     // 닉네임 유효성 검사
     if (!nickname || typeof nickname !== 'string') {
@@ -28,12 +37,13 @@ export async function POST(request: NextRequest) {
 
     const trimmedNickname = nickname.trim();
 
-    if (trimmedNickname.length < 2) {
-      return NextResponse.json({ error: '닉네임은 2자 이상이어야 합니다.' }, { status: 400 });
+    if (trimmedNickname.length < 2 || trimmedNickname.length > 20) {
+      return NextResponse.json({ error: '닉네임은 2~20자 사이여야 합니다.' }, { status: 400 });
     }
 
-    if (trimmedNickname.length > 20) {
-      return NextResponse.json({ error: '닉네임은 20자 이하여야 합니다.' }, { status: 400 });
+    // 필수 약관 동의 확인
+    if (!agreedTerms || !agreedPrivacy || !isUnder14Confirmed) {
+      return NextResponse.json({ error: '필수 약관 및 만 14세 이상 확인에 동의해야 합니다.' }, { status: 400 });
     }
 
     // Supabase 연결
@@ -49,7 +59,13 @@ export async function POST(request: NextRequest) {
     // 사용자 정보 업데이트
     const updateData: Record<string, unknown> = {
       nickname: trimmedNickname,
+      gender: gender || null,
+      birth_date: birthDate || null,
+      region: region || null,
+      is_under_14_confirmed: true,
+      agreed_marketing: agreedMarketing,
       is_onboarding_complete: true,
+      last_active_at: new Date().toISOString(),
     };
 
     const { data: updatedUser, error: updateError } = await supabase
@@ -58,6 +74,38 @@ export async function POST(request: NextRequest) {
       .eq('id', session.userId)
       .select()
       .single();
+
+    if (updateError || !updatedUser) {
+      console.error('User update error:', updateError);
+      return NextResponse.json({ error: '저장에 실패했습니다.' }, { status: 500 });
+    }
+
+    // 약관 동의 기록 저장
+    const agreements = [
+      { type: 'terms', agreed: true },
+      { type: 'privacy', agreed: true },
+      { type: 'marketing', agreed: agreedMarketing },
+    ];
+
+    // 현재 약관 버전 조회 및 동의 기록
+    for (const term of agreements) {
+      if (term.agreed) {
+        const { data: version } = await supabase
+          .from('terms_versions')
+          .select('id')
+          .eq('type', term.type)
+          .eq('is_current', true)
+          .single();
+        
+        if (version) {
+          await supabase.from('user_agreements').insert({
+            user_id: session.userId,
+            terms_version_id: version.id,
+            ip_address: request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown',
+          });
+        }
+      }
+    }
 
     if (updateError || !updatedUser) {
       console.error('User update error:', updateError);

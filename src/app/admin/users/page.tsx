@@ -40,6 +40,7 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const limit = 15;
 
   const fetchUsers = async () => {
@@ -84,6 +85,46 @@ export default function AdminUsersPage() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleUserAction = async (
+    targetUser: UserData,
+    action: 'ban' | 'unban' | 'suspend' | 'unsuspend'
+  ) => {
+    const actionLabelMap: Record<typeof action, string> = {
+      ban: '차단',
+      unban: '차단 해제',
+      suspend: '정지',
+      unsuspend: '정지 해제',
+    };
+
+    const label = actionLabelMap[action];
+    if (!confirm(`${targetUser.nickname}님을 ${label}하시겠어요?`)) return;
+
+    setActionLoadingId(targetUser.id);
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: targetUser.id,
+          action,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || `${label} 처리에 실패했습니다.`);
+        return;
+      }
+
+      await fetchUsers();
+    } catch (error) {
+      console.error('Admin action error:', error);
+      alert(`${label} 처리 중 오류가 발생했습니다.`);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -276,11 +317,47 @@ export default function AdminUsersPage() {
                         {formatDate(user.created_at)}
                       </td>
                       <td className="p-4 text-center">
-                        <Link href={`/admin/users/${user.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="w-4 h-4" />
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleUserAction(
+                                user,
+                                user.is_suspended ? 'unsuspend' : 'suspend'
+                              )
+                            }
+                            disabled={actionLoadingId === user.id}
+                            className={cn(
+                              user.is_suspended ? 'text-yellow-400' : 'text-muted-foreground'
+                            )}
+                            title={user.is_suspended ? '정지 해제' : '정지'}
+                          >
+                            <AlertTriangle className="w-4 h-4" />
                           </Button>
-                        </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleUserAction(
+                                user,
+                                user.is_banned ? 'unban' : 'ban'
+                              )
+                            }
+                            disabled={actionLoadingId === user.id}
+                            className={cn(
+                              user.is_banned ? 'text-red-400' : 'text-muted-foreground'
+                            )}
+                            title={user.is_banned ? '차단 해제' : '차단'}
+                          >
+                            <Ban className="w-4 h-4" />
+                          </Button>
+                          <Link href={`/admin/users/${user.id}`}>
+                            <Button variant="ghost" size="sm" title="상세 보기">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                        </div>
                       </td>
                     </motion.tr>
                   ))}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/lib/useAuth';
 import { User, Sparkles, ArrowRight, Check } from 'lucide-react';
+import Link from 'next/link';
 
 export default function OnboardingPage() {
   const { user, isLoading, isAuthenticated, refresh } = useAuth();
@@ -11,6 +12,13 @@ export default function OnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [gender, setGender] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [region, setRegion] = useState('');
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+  const [agreedMarketing, setAgreedMarketing] = useState(false);
+  const [isUnder14Confirmed, setIsUnder14Confirmed] = useState(false);
 
   // 사용자 닉네임 미리 채우기
   useEffect(() => {
@@ -51,6 +59,11 @@ export default function OnboardingPage() {
       return;
     }
 
+    if (!agreedTerms || !agreedPrivacy || !isUnder14Confirmed) {
+      setError('필수 약관 및 만 14세 이상 확인에 동의해야 합니다.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -60,7 +73,16 @@ export default function OnboardingPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ nickname: nickname.trim() }),
+        body: JSON.stringify({
+          nickname: nickname.trim(),
+          gender: gender || null,
+          birthDate: birthDate || null,
+          region: region.trim() || null,
+          agreedTerms,
+          agreedPrivacy,
+          agreedMarketing,
+          isUnder14Confirmed,
+        }),
         credentials: 'include',
       });
 
@@ -179,6 +201,125 @@ export default function OnboardingPage() {
               </p>
             </div>
 
+            {/* Additional Profile Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="gender" className="block text-sm font-medium text-white/80 mb-2">
+                  성별 (선택)
+                </label>
+                <select
+                  id="gender"
+                  value={gender}
+                  onChange={(e) => {
+                    setGender(e.target.value);
+                    setError(null);
+                  }}
+                  className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                >
+                  <option value="">선택 안함</option>
+                  <option value="male">남성</option>
+                  <option value="female">여성</option>
+                  <option value="other">기타</option>
+                  <option value="private">비공개</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="birthDate" className="block text-sm font-medium text-white/80 mb-2">
+                  생년월일 (선택)
+                </label>
+                <input
+                  type="date"
+                  id="birthDate"
+                  value={birthDate}
+                  onChange={(e) => {
+                    setBirthDate(e.target.value);
+                    setError(null);
+                  }}
+                  className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="region" className="block text-sm font-medium text-white/80 mb-2">
+                관심 지역 (선택)
+              </label>
+              <input
+                type="text"
+                id="region"
+                value={region}
+                onChange={(e) => {
+                  setRegion(e.target.value);
+                  setError(null);
+                }}
+                placeholder="예: 서울, 부산, 경기"
+                className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+              />
+            </div>
+
+            {/* Agreements */}
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-medium text-white/80">약관 동의</p>
+              <label className="flex items-start gap-3 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={agreedTerms}
+                  onChange={(e) => {
+                    setAgreedTerms(e.target.checked);
+                    setError(null);
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10"
+                />
+                <span>
+                  <Link href="/terms" className="text-white/80 underline">
+                    이용약관
+                  </Link>{' '}
+                  동의 (필수)
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={agreedPrivacy}
+                  onChange={(e) => {
+                    setAgreedPrivacy(e.target.checked);
+                    setError(null);
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10"
+                />
+                <span>
+                  <Link href="/privacy" className="text-white/80 underline">
+                    개인정보 처리방침
+                  </Link>{' '}
+                  동의 (필수)
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={agreedMarketing}
+                  onChange={(e) => {
+                    setAgreedMarketing(e.target.checked);
+                    setError(null);
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10"
+                />
+                <span>마케팅 정보 수신 동의 (선택)</span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={isUnder14Confirmed}
+                  onChange={(e) => {
+                    setIsUnder14Confirmed(e.target.checked);
+                    setError(null);
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10"
+                />
+                <span>만 14세 이상입니다 (필수)</span>
+              </label>
+            </div>
+
             {/* Error Message */}
             {error && (
               <motion.div
@@ -193,7 +334,13 @@ export default function OnboardingPage() {
             {/* Submit Button */}
             <motion.button
               type="submit"
-              disabled={isSubmitting || !nickname.trim()}
+              disabled={
+                isSubmitting ||
+                !nickname.trim() ||
+                !agreedTerms ||
+                !agreedPrivacy ||
+                !isUnder14Confirmed
+              }
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={`

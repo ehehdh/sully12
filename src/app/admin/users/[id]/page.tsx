@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
@@ -48,7 +48,6 @@ interface Report {
 
 export default function AdminUserDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { user: currentAdmin } = useAuth();
   const userId = params.id as string;
   
@@ -58,6 +57,7 @@ export default function AdminUserDetailPage() {
   const [receivedReports, setReceivedReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   
   // 제재 모달
   const [showSanctionModal, setShowSanctionModal] = useState(false);
@@ -65,12 +65,16 @@ export default function AdminUserDetailPage() {
   const [sanctionDays, setSanctionDays] = useState(1);
   const [sanctionReason, setSanctionReason] = useState('');
 
-  useEffect(() => {
-    const fetchUserDetail = async () => {
+  const fetchUserDetail = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) {
+        setLoading(true);
+      }
+
       try {
         const res = await fetch(`/api/admin/users/${userId}`);
         const data = await res.json();
-        
+
         if (data.user) {
           setUser(data.user);
           setStats(data.stats);
@@ -80,19 +84,25 @@ export default function AdminUserDetailPage() {
       } catch (error) {
         console.error('Failed to fetch user:', error);
       } finally {
-        setLoading(false);
+        if (showLoading) {
+          setLoading(false);
+        }
       }
-    };
+    },
+    [userId]
+  );
 
+  useEffect(() => {
     if (userId) {
-      fetchUserDetail();
+      fetchUserDetail(true);
     }
-  }, [userId]);
+  }, [userId, fetchUserDetail]);
 
   const handleRoleChange = async (newRole: string) => {
     if (!confirm(`역할을 ${newRole === 'admin' ? '관리자' : newRole === 'moderator' ? '중재자' : '사용자'}로 변경하시겠습니까?`)) return;
     
     setActionLoading(true);
+    setActionMessage(null);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
@@ -105,11 +115,12 @@ export default function AdminUserDetailPage() {
       
       if (res.ok) {
         setUser(prev => prev ? { ...prev, role: newRole as any } : null);
-        alert('역할이 변경되었습니다.');
+        setActionMessage('역할이 변경되었습니다.');
+        await fetchUserDetail();
       }
     } catch (error) {
       console.error('Role change failed:', error);
-      alert('역할 변경에 실패했습니다.');
+      setActionMessage('역할 변경에 실패했습니다.');
     } finally {
       setActionLoading(false);
     }
@@ -117,11 +128,12 @@ export default function AdminUserDetailPage() {
 
   const handleSanction = async () => {
     if (!sanctionReason.trim()) {
-      alert('사유를 입력해주세요.');
+      setActionMessage('사유를 입력해주세요.');
       return;
     }
     
     setActionLoading(true);
+    setActionMessage(null);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
@@ -136,16 +148,14 @@ export default function AdminUserDetailPage() {
       });
       
       if (res.ok) {
-        alert('제재가 적용되었습니다.');
+        setActionMessage('제재가 적용되었습니다.');
         setShowSanctionModal(false);
         setSanctionReason('');
-        // 새로고침
-        router.refresh();
-        window.location.reload();
+        await fetchUserDetail();
       }
     } catch (error) {
       console.error('Sanction failed:', error);
-      alert('제재 적용에 실패했습니다.');
+      setActionMessage('제재 적용에 실패했습니다.');
     } finally {
       setActionLoading(false);
     }
@@ -173,6 +183,9 @@ export default function AdminUserDetailPage() {
     };
     return labels[reason] || reason;
   };
+
+  const isActionError =
+    actionMessage?.includes('실패') || actionMessage?.includes('입력') || false;
 
   if (loading) {
     return (
@@ -205,6 +218,19 @@ export default function AdminUserDetailPage() {
             </Button>
           </Link>
         </div>
+
+        {actionMessage && (
+          <div
+            className={cn(
+              'mb-6 rounded-xl border px-4 py-3 text-sm',
+              isActionError
+                ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                : 'border-green-500/30 bg-green-500/10 text-green-400'
+            )}
+          >
+            {actionMessage}
+          </div>
+        )}
 
         {/* 사용자 프로필 카드 */}
         <motion.div
