@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch('/api/auth/me', {
         credentials: 'include',
+        cache: 'no-store',
       });
 
       const data = await response.json();
