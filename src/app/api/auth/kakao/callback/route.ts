@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createUserSession, USER_SESSION_COOKIE } from '@/lib/session';
+import { verifyOAuthState, OAUTH_STATE_COOKIE } from '@/lib/oauth';
 
 interface KakaoTokenResponse {
   access_token: string;
@@ -34,10 +36,12 @@ interface KakaoUserInfo {
 
 /**
  * 카카오 로그인 콜백 - 토큰 교환 및 사용자 정보 저장
+ * State 검증, 이메일 검증 확인 추가
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
+  const state = searchParams.get('state');
   const error = searchParams.get('error');
 
   // 에러 처리
@@ -48,6 +52,19 @@ export async function GET(request: NextRequest) {
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=no_code', request.url));
+  }
+
+  // State 검증 (CSRF 방지)
+  const savedState = request.cookies.get(OAUTH_STATE_COOKIE)?.value;
+  if (!state || !savedState) {
+    console.error('OAuth state missing');
+    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
+  }
+
+  const stateVerification = await verifyOAuthState(savedState, 'kakao');
+  if (!stateVerification.valid || state !== savedState) {
+    console.error('OAuth state verification failed');
+    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
   }
 
   const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
@@ -84,7 +101,6 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      // 에러 메시지를 URL에 포함 (디버깅용)
       const errorMsg = encodeURIComponent(errorData.substring(0, 100));
       return NextResponse.redirect(new URL(`/login?error=token_failed&msg=${errorMsg}`, request.url));
     }
@@ -115,6 +131,17 @@ export async function GET(request: NextRequest) {
                          userData.kakao_account?.profile?.profile_image_url || 
                          null;
     const email = userData.kakao_account?.email || null;
+    
+    // 이메일 검증 여부 확인 (이메일이 있는 경우)
+    const isEmailVerified = userData.kakao_account?.is_email_verified ?? true;
+    
+    // 이메일이 있지만 검증되지 않은 경우 경고 (카카오는 검증 필수가 아님)
+    if (email && !isEmailVerified) {
+      console.warn('Kakao email not verified:', email);
+      // 카카오의 경우 이메일 검증이 필수가 아니므로 계속 진행
+      // 필수로 만들려면 아래 주석 해제
+      // return NextResponse.redirect(new URL('/login?error=email_not_verified', request.url));
+    }
 
     // 4. Supabase에 사용자 저장/업데이트
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -128,7 +155,10 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     let userId: string;
+    let userRole: string = 'user';
     let needsOnboarding = false;
+    let finalNickname = nickname;
+    let finalProfileImage = profileImage;
 
     // 5. 이메일로 기존 계정 확인 (이메일이 있는 경우만)
     if (email) {
@@ -143,7 +173,10 @@ export async function GET(request: NextRequest) {
         if (existingUserByEmail.kakao_id === kakaoId) {
           // 이미 카카오 연동된 계정 - 로그인
           userId = existingUserByEmail.id;
+          userRole = existingUserByEmail.role || 'user';
           needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+          finalNickname = existingUserByEmail.nickname || nickname;
+          finalProfileImage = existingUserByEmail.profile_image || profileImage;
           
           // 마지막 로그인 시간 업데이트
           await supabase
@@ -172,19 +205,27 @@ export async function GET(request: NextRequest) {
           }
           
           userId = existingUserByEmail.id;
+          userRole = existingUserByEmail.role || 'user';
           needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+          finalNickname = existingUserByEmail.nickname || nickname;
+          finalProfileImage = existingUserByEmail.profile_image || profileImage;
         } else {
           // 다른 카카오 계정으로 연동됨
           userId = existingUserByEmail.id;
+          userRole = existingUserByEmail.role || 'user';
           needsOnboarding = !existingUserByEmail.is_onboarding_complete;
+          finalNickname = existingUserByEmail.nickname || nickname;
+          finalProfileImage = existingUserByEmail.profile_image || profileImage;
         }
         
-        // 세션 생성 및 리다이렉트
-        return createSessionAndRedirect(request, {
+        // JWT 세션 생성 및 리다이렉트
+        return await createSessionAndRedirect(request, {
           userId,
           kakaoId,
-          nickname: existingUserByEmail.nickname || nickname,
-          profileImage: existingUserByEmail.profile_image || profileImage,
+          email,
+          nickname: finalNickname,
+          profileImage: finalProfileImage,
+          role: userRole,
           needsOnboarding
         });
       }
@@ -202,7 +243,7 @@ export async function GET(request: NextRequest) {
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
         .update({
-          nickname: existingUser.nickname || nickname, // 기존 닉네임 유지
+          nickname: existingUser.nickname || nickname,
           profile_image: profileImage,
           email,
           last_login_at: new Date().toISOString(),
@@ -217,7 +258,10 @@ export async function GET(request: NextRequest) {
       }
       
       userId = updatedUser.id;
+      userRole = updatedUser.role || 'user';
       needsOnboarding = !updatedUser.is_onboarding_complete;
+      finalNickname = updatedUser.nickname;
+      finalProfileImage = updatedUser.profile_image;
     } else {
       // 새 사용자 생성
       const { data: newUser, error: createError } = await supabase
@@ -239,14 +283,18 @@ export async function GET(request: NextRequest) {
       
       userId = newUser.id;
       needsOnboarding = true;
+      finalNickname = nickname;
+      finalProfileImage = profileImage;
     }
 
-    // 7. 세션 생성 및 리다이렉트
-    return createSessionAndRedirect(request, {
+    // 7. JWT 세션 생성 및 리다이렉트
+    return await createSessionAndRedirect(request, {
       userId,
       kakaoId,
-      nickname,
-      profileImage,
+      email,
+      nickname: finalNickname,
+      profileImage: finalProfileImage,
+      role: userRole,
       needsOnboarding
     });
 
@@ -256,35 +304,36 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 세션 생성 및 리다이렉트 헬퍼 함수
-function createSessionAndRedirect(
+// JWT 세션 생성 및 리다이렉트 헬퍼 함수
+async function createSessionAndRedirect(
   request: NextRequest,
   data: {
     userId: string;
     kakaoId: string;
+    email: string | null;
     nickname: string;
     profileImage: string | null;
+    role: string;
     needsOnboarding: boolean;
   }
 ) {
-  const { userId, kakaoId, nickname, profileImage, needsOnboarding } = data;
+  const { userId, kakaoId, email, nickname, profileImage, role, needsOnboarding } = data;
   
-  // 세션 쿠키 생성
-  const sessionData = {
+  // JWT 세션 쿠키 생성
+  const sessionToken = await createUserSession({
     userId,
     kakaoId,
+    email: email || undefined,
     nickname,
     profileImage,
-    expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7일
-  };
-
-  const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
+    role,
+  });
 
   // 쿠키 설정 및 리다이렉트
   const redirectUrl = needsOnboarding ? '/onboarding' : '/';
   const response = NextResponse.redirect(new URL(redirectUrl, request.url));
   
-  response.cookies.set('politi-log-session', sessionToken, {
+  response.cookies.set(USER_SESSION_COOKIE, sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -292,6 +341,8 @@ function createSessionAndRedirect(
     path: '/',
   });
 
+  // OAuth 관련 쿠키 삭제
+  response.cookies.delete(OAUTH_STATE_COOKIE);
+
   return response;
 }
-

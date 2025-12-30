@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createUserSession, USER_SESSION_COOKIE } from '@/lib/session';
+import { 
+  verifyOAuthState, 
+  OAUTH_STATE_COOKIE, 
+  OAUTH_CODE_VERIFIER_COOKIE 
+} from '@/lib/oauth';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -22,10 +28,12 @@ interface GoogleUserInfo {
 
 /**
  * 구글 로그인 콜백 - 토큰 교환 및 사용자 정보 저장
+ * State 검증, 이메일 검증 확인 추가
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
+  const state = searchParams.get('state');
   const error = searchParams.get('error');
 
   // 에러 처리
@@ -38,6 +46,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=no_code', request.url));
   }
 
+  // State 검증 (CSRF 방지)
+  const savedState = request.cookies.get(OAUTH_STATE_COOKIE)?.value;
+  if (!state || !savedState) {
+    console.error('OAuth state missing');
+    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
+  }
+
+  const stateVerification = await verifyOAuthState(savedState, 'google');
+  if (!stateVerification.valid || state !== savedState) {
+    console.error('OAuth state verification failed');
+    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
+  }
+
+  // Code verifier 가져오기 (PKCE)
+  const codeVerifier = request.cookies.get(OAUTH_CODE_VERIFIER_COOKIE)?.value;
+  if (!codeVerifier) {
+    console.error('Code verifier missing');
+    return NextResponse.redirect(new URL('/login?error=invalid_request', request.url));
+  }
+
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
   const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
@@ -48,7 +76,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. 인가 코드로 토큰 요청
+    // 1. 인가 코드로 토큰 요청 (PKCE code_verifier 포함)
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
@@ -60,6 +88,7 @@ export async function GET(request: NextRequest) {
         client_secret: GOOGLE_CLIENT_SECRET,
         redirect_uri: REDIRECT_URI,
         code: code,
+        code_verifier: codeVerifier,
       }),
     });
 
@@ -85,13 +114,19 @@ export async function GET(request: NextRequest) {
 
     const userData: GoogleUserInfo = await userResponse.json();
 
-    // 3. 사용자 정보 추출
+    // 3. 이메일 검증 확인 (보안 강화)
+    if (!userData.verified_email) {
+      console.error('Email not verified:', userData.email);
+      return NextResponse.redirect(new URL('/login?error=email_not_verified', request.url));
+    }
+
+    // 4. 사용자 정보 추출
     const googleId = userData.id;
     const email = userData.email;
     const nickname = userData.name || userData.given_name || `User${googleId.slice(-4)}`;
     const profileImage = userData.picture || null;
 
-    // 4. Supabase 연결
+    // 5. Supabase 연결
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
@@ -102,7 +137,7 @@ export async function GET(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 5. 이메일로 기존 계정 확인
+    // 6. 이메일로 기존 계정 확인
     const { data: existingUserByEmail } = await supabase
       .from('users')
       .select('*')
@@ -110,7 +145,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     let userId: string;
-    let isNewUser = false;
+    let userRole: string = 'user';
     let needsOnboarding = false;
 
     if (existingUserByEmail) {
@@ -118,6 +153,7 @@ export async function GET(request: NextRequest) {
       if (existingUserByEmail.google_id === googleId) {
         // 이미 구글 연동된 계정 - 로그인
         userId = existingUserByEmail.id;
+        userRole = existingUserByEmail.role || 'user';
         needsOnboarding = !existingUserByEmail.is_onboarding_complete;
         
         // 마지막 로그인 시간 업데이트
@@ -128,7 +164,6 @@ export async function GET(request: NextRequest) {
           
       } else if (existingUserByEmail.google_id === null && existingUserByEmail.kakao_id) {
         // 카카오로 가입된 계정 - 구글 연동 필요
-        // 현재는 에러 처리, 나중에 연동 기능 추가 가능
         const provider = existingUserByEmail.kakao_id ? '카카오' : '다른 방법';
         return NextResponse.redirect(
           new URL(`/login?error=email_exists&provider=${provider}`, request.url)
@@ -149,6 +184,7 @@ export async function GET(request: NextRequest) {
         }
         
         userId = existingUserByEmail.id;
+        userRole = existingUserByEmail.role || 'user';
         needsOnboarding = !existingUserByEmail.is_onboarding_complete;
       }
     } else {
@@ -162,6 +198,7 @@ export async function GET(request: NextRequest) {
       if (existingUserByGoogleId) {
         // 구글 ID로 가입된 계정 존재 (이메일이 변경된 경우)
         userId = existingUserByGoogleId.id;
+        userRole = existingUserByGoogleId.role || 'user';
         needsOnboarding = !existingUserByGoogleId.is_onboarding_complete;
         
         await supabase
@@ -191,34 +228,36 @@ export async function GET(request: NextRequest) {
         }
         
         userId = newUser.id;
-        isNewUser = true;
         needsOnboarding = true;
       }
     }
 
-    // 6. 세션 쿠키 생성
-    const sessionData = {
+    // 7. JWT 세션 쿠키 생성
+    const sessionToken = await createUserSession({
       userId,
-      googleId,
       email,
       nickname,
       profileImage,
-      expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7일
-    };
+      googleId,
+      role: userRole,
+    });
 
-    const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
-
-    // 7. 쿠키 설정 및 리다이렉트
+    // 8. 쿠키 설정 및 리다이렉트
     const redirectUrl = needsOnboarding ? '/onboarding' : '/';
     const response = NextResponse.redirect(new URL(redirectUrl, request.url));
     
-    response.cookies.set('politi-log-session', sessionToken, {
+    // JWT 세션 쿠키 설정
+    response.cookies.set(USER_SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
+
+    // OAuth 관련 쿠키 삭제
+    response.cookies.delete(OAUTH_STATE_COOKIE);
+    response.cookies.delete(OAUTH_CODE_VERIFIER_COOKIE);
 
     return response;
 

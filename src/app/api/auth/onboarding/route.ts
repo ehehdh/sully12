@@ -1,35 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
-interface SessionData {
-  userId: string;
-  kakaoId?: string;
-  googleId?: string;
-  nickname: string;
-  profileImage: string | null;
-  expiresAt: number;
-}
+import { getUserSession, createUserSession, USER_SESSION_COOKIE } from '@/lib/session';
 
 /**
- * 온보딩 완료 - 닉네임 저장
+ * POST /api/auth/onboarding
+ * 온보딩 완료 - 닉네임 저장 (JWT 인증)
  */
 export async function POST(request: NextRequest) {
-  const sessionCookie = request.cookies.get('politi-log-session');
+  // JWT 세션 검증
+  const session = await getUserSession(request);
 
-  if (!sessionCookie?.value) {
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    // 세션 확인
-    const sessionData: SessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
-
-    if (Date.now() > sessionData.expiresAt) {
-      return NextResponse.json({ error: 'Session expired' }, { status: 401 });
-    }
-
     // 요청 바디 파싱
     const body = await request.json();
     const { nickname } = body;
@@ -59,35 +44,16 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 사용자 정보 업데이트 - 먼저 is_onboarding_complete 컬럼 존재 여부 확인
-    // 컬럼이 없을 수 있으므로 nickname만 먼저 업데이트 시도
-    let updateData: Record<string, unknown> = {
+    // 사용자 정보 업데이트
+    const updateData: Record<string, unknown> = {
       nickname: trimmedNickname,
+      is_onboarding_complete: true,
     };
-
-    // is_onboarding_complete 컬럼이 있으면 추가
-    try {
-      const { data: checkColumn } = await supabase
-        .from('users')
-        .select('is_onboarding_complete')
-        .eq('id', sessionData.userId)
-        .single();
-      
-      if (checkColumn !== null && 'is_onboarding_complete' in checkColumn) {
-        updateData = {
-          ...updateData,
-          is_onboarding_complete: true,
-        };
-      }
-    } catch {
-      // 컬럼이 없으면 무시
-      console.log('is_onboarding_complete column may not exist, skipping');
-    }
 
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
       .update(updateData)
-      .eq('id', sessionData.userId)
+      .eq('id', session.userId)
       .select()
       .single();
 
@@ -96,13 +62,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '저장에 실패했습니다.' }, { status: 500 });
     }
 
-    // 세션 업데이트 (닉네임 변경 반영)
-    const newSessionData = {
-      ...sessionData,
+    // 새 JWT 세션 생성 (닉네임 변경 반영)
+    const newSessionToken = await createUserSession({
+      userId: session.userId,
+      email: session.email,
       nickname: trimmedNickname,
-    };
-
-    const newSessionToken = Buffer.from(JSON.stringify(newSessionData)).toString('base64');
+      profileImage: session.profileImage,
+      googleId: session.googleId,
+      kakaoId: session.kakaoId,
+      role: session.role || 'user',
+    });
 
     const response = NextResponse.json({
       success: true,
@@ -113,8 +82,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 세션 쿠키 업데이트
-    response.cookies.set('politi-log-session', newSessionToken, {
+    // JWT 세션 쿠키 업데이트
+    response.cookies.set(USER_SESSION_COOKIE, newSessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

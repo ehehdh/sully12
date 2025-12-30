@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getUserSession } from '@/lib/session';
 
 /**
  * POST /api/reports
- * 신고 접수 (사용자가 다른 사용자를 신고)
+ * 신고 접수 (사용자가 다른 사용자를 신고) - JWT 인증
  */
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,24 +14,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
   
-  // 세션 확인
-  const sessionCookie = request.cookies.get('politi-log-session');
+  // JWT 세션 검증
+  const session = await getUserSession(request);
   
-  if (!sessionCookie?.value) {
+  if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
   
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
-    
-    if (Date.now() > sessionData.expiresAt) {
-      return NextResponse.json({ error: 'Session expired' }, { status: 401 });
-    }
-    
-    const reporterId = sessionData.userId;
-    const reporterName = sessionData.nickname;
+    const reporterId = session.userId;
+    const reporterName = session.nickname || 'Unknown';
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
@@ -105,7 +98,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/reports
- * 내가 신고한/받은 목록 조회
+ * 내가 신고한/받은 목록 조회 - JWT 인증
  */
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -115,18 +108,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
   
-  const sessionCookie = request.cookies.get('politi-log-session');
+  // JWT 세션 검증
+  const session = await getUserSession(request);
   
-  if (!sessionCookie?.value) {
+  if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
   
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
-    
-    const userId = sessionData.userId;
+    const userId = session.userId;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     const { searchParams } = new URL(request.url);

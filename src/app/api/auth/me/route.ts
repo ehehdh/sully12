@@ -1,35 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
-interface SessionData {
-  userId: string;
-  kakaoId: string;
-  nickname: string;
-  profileImage: string | null;
-  expiresAt: number;
-}
+import { getUserSession, USER_SESSION_COOKIE } from '@/lib/session';
 
 /**
- * 현재 로그인된 사용자 정보 반환
+ * GET /api/auth/me
+ * 현재 로그인된 사용자 정보 반환 (JWT 기반)
  */
 export async function GET(request: NextRequest) {
-  const sessionCookie = request.cookies.get('politi-log-session');
-
-  if (!sessionCookie?.value) {
-    return NextResponse.json({ user: null }, { status: 200 });
-  }
-
   try {
-    // 세션 토큰 디코딩
-    const sessionData: SessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
+    // JWT 세션 검증
+    const session = await getUserSession(request);
 
-    // 만료 확인
-    if (Date.now() > sessionData.expiresAt) {
-      const response = NextResponse.json({ user: null, error: 'Session expired' }, { status: 401 });
-      response.cookies.delete('politi-log-session');
-      return response;
+    if (!session) {
+      return NextResponse.json({ user: null }, { status: 200 });
     }
 
     // DB에서 최신 사용자 정보 조회
@@ -44,14 +27,44 @@ export async function GET(request: NextRequest) {
     
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, kakao_id, google_id, nickname, profile_image, email, role, created_at, is_onboarding_complete')
-      .eq('id', sessionData.userId)
+      .select('id, kakao_id, google_id, nickname, profile_image, email, role, created_at, is_onboarding_complete, is_banned, is_suspended')
+      .eq('id', session.userId)
       .single();
 
     if (error || !user) {
+      // 사용자가 DB에 없으면 세션 삭제
       const response = NextResponse.json({ user: null }, { status: 200 });
-      response.cookies.delete('politi-log-session');
+      response.cookies.delete(USER_SESSION_COOKIE);
       return response;
+    }
+
+    // 정지 또는 차단된 사용자 확인
+    if (user.is_banned) {
+      const response = NextResponse.json({ 
+        user: null, 
+        error: 'Account has been banned' 
+      }, { status: 403 });
+      response.cookies.delete(USER_SESSION_COOKIE);
+      return response;
+    }
+
+    if (user.is_suspended) {
+      // 정지된 사용자는 정보는 반환하되 상태 표시
+      return NextResponse.json({
+        user: {
+          id: user.id,
+          kakaoId: user.kakao_id,
+          googleId: user.google_id,
+          nickname: user.nickname,
+          profileImage: user.profile_image,
+          email: user.email,
+          role: user.role,
+          createdAt: user.created_at,
+          isOnboardingComplete: user.is_onboarding_complete ?? true,
+          isSuspended: true,
+        },
+        warning: 'Account is currently suspended'
+      });
     }
 
     return NextResponse.json({
@@ -68,7 +81,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch {
+  } catch (error) {
+    console.error('Auth me error:', error);
     return NextResponse.json({ user: null }, { status: 200 });
   }
 }

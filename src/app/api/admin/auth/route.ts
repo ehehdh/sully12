@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createAdminSession, verifyAdminSession, ADMIN_SESSION_COOKIE } from '@/lib/session';
+import { checkRateLimit, getRateLimitHeaders, getClientIP } from '@/lib/rateLimit';
 
-const ADMIN_COOKIE_NAME = 'politi-log-admin-session';
-const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24시간
+const SESSION_DURATION = 24 * 60 * 60; // 24시간 (초 단위)
+
+// 레이트 리밋 설정: 15분 동안 5회 시도 허용
+const RATE_LIMIT_ATTEMPTS = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15분
 
 /**
  * POST /api/admin/auth
@@ -9,6 +14,26 @@ const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24시간
  */
 export async function POST(request: NextRequest) {
   try {
+    // 레이트 리밋 체크
+    const clientIP = getClientIP(request.headers);
+    const rateLimitKey = `admin-login:${clientIP}`;
+    const { allowed, remaining, resetAt } = checkRateLimit(
+      rateLimitKey, 
+      RATE_LIMIT_ATTEMPTS, 
+      RATE_LIMIT_WINDOW_MS
+    );
+    
+    if (!allowed) {
+      const resetTime = Math.ceil((resetAt - Date.now()) / 1000 / 60); // 분 단위
+      return NextResponse.json(
+        { error: `Too many login attempts. Try again in ${resetTime} minutes.` },
+        { 
+          status: 429,
+          headers: getRateLimitHeaders(remaining, resetAt)
+        }
+      );
+    }
+    
     const { password } = await request.json();
     
     // 환경변수에서 관리자 비밀번호 가져오기
@@ -26,28 +51,24 @@ export async function POST(request: NextRequest) {
     if (password !== adminPassword) {
       return NextResponse.json(
         { error: 'Invalid password' },
-        { status: 401 }
+        { 
+          status: 401,
+          headers: getRateLimitHeaders(remaining, resetAt)
+        }
       );
     }
     
-    // 세션 데이터 생성
-    const sessionData = {
-      isAdmin: true,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + SESSION_DURATION,
-    };
-    
-    // Base64로 인코딩
-    const sessionValue = Buffer.from(JSON.stringify(sessionData)).toString('base64');
+    // JWT 세션 토큰 생성
+    const sessionToken = await createAdminSession();
     
     // 응답 생성 및 쿠키 설정
     const response = NextResponse.json({ success: true });
     
-    response.cookies.set(ADMIN_COOKIE_NAME, sessionValue, {
+    response.cookies.set(ADMIN_SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: SESSION_DURATION / 1000, // 초 단위
+      maxAge: SESSION_DURATION,
       path: '/',
     });
     
@@ -68,7 +89,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
-  response.cookies.delete(ADMIN_COOKIE_NAME);
+  response.cookies.delete(ADMIN_SESSION_COOKIE);
   return response;
 }
 
@@ -77,24 +98,22 @@ export async function DELETE() {
  * 현재 관리자 세션 상태 확인
  */
 export async function GET(request: NextRequest) {
-  const sessionCookie = request.cookies.get(ADMIN_COOKIE_NAME);
+  const sessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE);
   
   if (!sessionCookie?.value) {
     return NextResponse.json({ isAdmin: false });
   }
   
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
+    const session = await verifyAdminSession(sessionCookie.value);
     
-    if (Date.now() > sessionData.expiresAt) {
+    if (!session) {
       return NextResponse.json({ isAdmin: false });
     }
     
     return NextResponse.json({ 
       isAdmin: true,
-      expiresAt: sessionData.expiresAt 
+      createdAt: session.createdAt
     });
     
   } catch {

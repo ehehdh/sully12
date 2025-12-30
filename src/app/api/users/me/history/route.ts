@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getUserSession } from '@/lib/session';
 
 /**
  * GET /api/users/me/history
- * 현재 로그인한 사용자의 토론 기록 조회
+ * 현재 로그인한 사용자의 토론 기록 조회 (JWT 인증)
  */
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,23 +14,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
   
-  // 세션에서 사용자 ID 가져오기
-  const sessionCookie = request.cookies.get('politi-log-session');
+  // JWT 세션 검증
+  const session = await getUserSession(request);
   
-  if (!sessionCookie?.value) {
+  if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
   
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf-8')
-    );
-    
-    if (Date.now() > sessionData.expiresAt) {
-      return NextResponse.json({ error: 'Session expired' }, { status: 401 });
-    }
-    
-    const userId = sessionData.userId;
+    const userId = session.userId;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     const { searchParams } = new URL(request.url);
