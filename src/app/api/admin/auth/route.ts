@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         { error: `Too many login attempts. Try again in ${resetTime} minutes.` },
         { 
           status: 429,
-          headers: getRateLimitHeaders(remaining, resetAt)
+          headers: getRateLimitHeaders({ remaining, resetAt })
         }
       );
     }
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid password' },
         { 
           status: 401,
-          headers: getRateLimitHeaders(remaining, resetAt)
+          headers: getRateLimitHeaders({ remaining, resetAt })
         }
       );
     }

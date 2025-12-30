@@ -76,17 +76,22 @@ export function checkRateLimit(
 /**
  * 레이트 리밋 헤더 생성
  */
-export function getRateLimitHeaders(remaining: number, resetAt: number): Record<string, string> {
+export function getRateLimitHeaders(result: { remaining: number; resetAt: number }): Record<string, string> {
   return {
-    'X-RateLimit-Remaining': remaining.toString(),
-    'X-RateLimit-Reset': Math.ceil(resetAt / 1000).toString(),
+    'X-RateLimit-Remaining': result.remaining.toString(),
+    'X-RateLimit-Reset': Math.ceil(result.resetAt / 1000).toString(),
   };
 }
 
 /**
  * IP 주소 추출 헬퍼
+ * @param requestOrHeaders - NextRequest 또는 Headers 객체
  */
-export function getClientIP(headers: Headers): string {
+export function getClientIP(requestOrHeaders: { headers: Headers } | Headers): string {
+  const headers = 'headers' in requestOrHeaders && typeof requestOrHeaders.headers.get === 'function'
+    ? requestOrHeaders.headers 
+    : requestOrHeaders as Headers;
+  
   // Vercel, Cloudflare 등의 프록시 헤더 확인
   const forwardedFor = headers.get('x-forwarded-for');
   if (forwardedFor) {
@@ -100,3 +105,4 @@ export function getClientIP(headers: Headers): string {
   
   return 'unknown';
 }
+
