@@ -28,10 +28,16 @@ export const USER_SESSION_COOKIE = 'politi-log-session';
 export const ADMIN_SESSION_COOKIE = 'politi-log-admin-session';
 
 // JWT 시크릿 키 (환경 변수에서 로드)
-function getJwtSecret(): Uint8Array {
+function getJwtSecret(): Uint8Array | null {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
-    throw new Error('SESSION_SECRET environment variable is required');
+    // 개발 환경에서는 폴백 허용
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ SESSION_SECRET is not set. Using development fallback.');
+      return new TextEncoder().encode('dev-only-fallback-key-not-for-production!');
+    }
+    console.error('SESSION_SECRET environment variable is required in production');
+    return null;
   }
   return new TextEncoder().encode(secret);
 }
@@ -43,6 +49,10 @@ function getJwtSecret(): Uint8Array {
  */
 export async function createUserSession(payload: Omit<UserSessionPayload, 'iat' | 'exp'>): Promise<string> {
   const secret = getJwtSecret();
+  
+  if (!secret) {
+    throw new Error('Cannot create session: SESSION_SECRET is not configured');
+  }
   
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
@@ -57,6 +67,12 @@ export async function createUserSession(payload: Omit<UserSessionPayload, 'iat' 
 export async function verifyUserSession(token: string): Promise<UserSessionPayload | null> {
   try {
     const secret = getJwtSecret();
+    
+    if (!secret) {
+      console.error('Cannot verify session: SESSION_SECRET is not configured');
+      return null;
+    }
+    
     const { payload } = await jwtVerify(token, secret);
     return payload as UserSessionPayload;
   } catch (error) {
@@ -100,6 +116,10 @@ export async function getUserSessionFromCookies(): Promise<UserSessionPayload | 
 export async function createAdminSession(): Promise<string> {
   const secret = getJwtSecret();
   
+  if (!secret) {
+    throw new Error('Cannot create admin session: SESSION_SECRET is not configured');
+  }
+  
   const payload: AdminSessionPayload = {
     isAdmin: true,
     createdAt: Date.now(),
@@ -118,6 +138,12 @@ export async function createAdminSession(): Promise<string> {
 export async function verifyAdminSession(token: string): Promise<AdminSessionPayload | null> {
   try {
     const secret = getJwtSecret();
+    
+    if (!secret) {
+      console.error('Cannot verify admin session: SESSION_SECRET is not configured');
+      return null;
+    }
+    
     const { payload } = await jwtVerify(token, secret);
     
     // isAdmin 플래그 확인
