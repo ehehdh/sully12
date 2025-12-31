@@ -56,12 +56,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json();
 
+      // 차단된 계정 처리 (403 응답)
+      if (response.status === 403) {
+        setState({
+          user: null,
+          isLoading: false,
+          isAuthenticated: false,
+          error: data.error || '계정이 차단되었습니다.',
+        });
+        // 로그인 페이지로 리다이렉트
+        window.location.href = '/login?error=account_banned';
+        return;
+      }
+
       if (data.user) {
+        // 정지된 계정 경고 처리
+        const isSuspended = data.user.isSuspended || data.warning === 'Account is currently suspended';
+        
         setState({
           user: data.user,
           isLoading: false,
           isAuthenticated: true,
-          error: null,
+          error: isSuspended ? '계정이 일시 정지되었습니다.' : null,
         });
       } else {
         setState({

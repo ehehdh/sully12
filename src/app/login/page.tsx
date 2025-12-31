@@ -15,6 +15,7 @@ function LoginContent() {
   const error = searchParams.get('error');
   const errorMsg = searchParams.get('msg'); // 상세 에러 메시지
   const provider = searchParams.get('provider'); // 기존 가입 방법
+  const until = searchParams.get('until'); // 정지 만료 시간
   const { isAuthenticated, isLoading } = useAuth();
 
   // 이미 로그인되어 있으면 홈으로 리다이렉트
@@ -42,6 +43,24 @@ function LoginContent() {
         return '서버 설정에 문제가 있습니다.';
       case 'email_exists':
         return `이미 ${provider || '다른 방법'}으로 가입된 이메일입니다. ${provider || '해당 방법'}으로 로그인해주세요.`;
+      case 'account_banned':
+        return '🚫 이 계정은 서비스 이용이 영구 제한되었습니다. 문의사항은 고객센터로 연락해주세요.';
+      case 'account_suspended':
+        if (until) {
+          try {
+            const suspendedUntil = new Date(until).toLocaleString('ko-KR');
+            return `⚠️ 이 계정은 ${suspendedUntil}까지 일시 정지되었습니다.`;
+          } catch {
+            return '⚠️ 이 계정은 현재 일시 정지 상태입니다.';
+          }
+        }
+        return '⚠️ 이 계정은 현재 일시 정지 상태입니다.';
+      case 'account_deleted':
+        return '❌ 탈퇴한 계정입니다. 복구를 원하시면 고객센터로 문의해주세요.';
+      case 'invalid_state':
+        return '보안 검증에 실패했습니다. 다시 시도해주세요.';
+      case 'email_not_verified':
+        return '이메일 인증이 필요합니다. 이메일을 확인해주세요.';
       default:
         return null;
     }

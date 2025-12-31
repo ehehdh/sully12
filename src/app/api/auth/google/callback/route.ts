@@ -149,6 +149,22 @@ export async function GET(request: NextRequest) {
     let needsOnboarding = false;
 
     if (existingUserByEmail) {
+      // ★ 차단/정지/탈퇴 확인
+      if (existingUserByEmail.deleted_at) {
+        return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
+      }
+      if (existingUserByEmail.is_banned) {
+        return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
+      }
+      if (existingUserByEmail.is_suspended) {
+        const suspendedUntil = existingUserByEmail.suspended_until 
+          ? new Date(existingUserByEmail.suspended_until).toISOString()
+          : '';
+        return NextResponse.redirect(
+          new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
+        );
+      }
+
       // 이메일로 기존 계정 존재
       if (existingUserByEmail.google_id === googleId) {
         // 이미 구글 연동된 계정 - 로그인
@@ -156,10 +172,13 @@ export async function GET(request: NextRequest) {
         userRole = existingUserByEmail.role || 'user';
         needsOnboarding = !existingUserByEmail.is_onboarding_complete;
         
-        // 마지막 로그인 시간 업데이트
+        // 마지막 로그인 시간 및 로그인 횟수 업데이트
         await supabase
           .from('users')
-          .update({ last_login_at: new Date().toISOString() })
+          .update({ 
+            last_login_at: new Date().toISOString(),
+            login_count: (existingUserByEmail.login_count || 0) + 1
+          })
           .eq('id', userId);
           
       } else if (existingUserByEmail.google_id === null && existingUserByEmail.kakao_id) {
@@ -196,6 +215,22 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existingUserByGoogleId) {
+        // ★ 차단/정지/탈퇴 확인
+        if (existingUserByGoogleId.deleted_at) {
+          return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
+        }
+        if (existingUserByGoogleId.is_banned) {
+          return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
+        }
+        if (existingUserByGoogleId.is_suspended) {
+          const suspendedUntil = existingUserByGoogleId.suspended_until 
+            ? new Date(existingUserByGoogleId.suspended_until).toISOString()
+            : '';
+          return NextResponse.redirect(
+            new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
+          );
+        }
+
         // 구글 ID로 가입된 계정 존재 (이메일이 변경된 경우)
         userId = existingUserByGoogleId.id;
         userRole = existingUserByGoogleId.role || 'user';
@@ -205,7 +240,8 @@ export async function GET(request: NextRequest) {
           .from('users')
           .update({ 
             email,
-            last_login_at: new Date().toISOString()
+            last_login_at: new Date().toISOString(),
+            login_count: (existingUserByGoogleId.login_count || 0) + 1
           })
           .eq('id', userId);
       } else {

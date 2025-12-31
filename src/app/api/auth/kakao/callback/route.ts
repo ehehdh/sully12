@@ -169,6 +169,22 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existingUserByEmail) {
+        // ★ 차단/정지/탈퇴 확인
+        if (existingUserByEmail.deleted_at) {
+          return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
+        }
+        if (existingUserByEmail.is_banned) {
+          return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
+        }
+        if (existingUserByEmail.is_suspended) {
+          const suspendedUntil = existingUserByEmail.suspended_until 
+            ? new Date(existingUserByEmail.suspended_until).toISOString()
+            : '';
+          return NextResponse.redirect(
+            new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
+          );
+        }
+
         // 이메일로 기존 계정 존재
         if (existingUserByEmail.kakao_id === kakaoId) {
           // 이미 카카오 연동된 계정 - 로그인
@@ -178,10 +194,13 @@ export async function GET(request: NextRequest) {
           finalNickname = existingUserByEmail.nickname || nickname;
           finalProfileImage = existingUserByEmail.profile_image || profileImage;
           
-          // 마지막 로그인 시간 업데이트
+          // 마지막 로그인 시간 및 로그인 횟수 업데이트
           await supabase
             .from('users')
-            .update({ last_login_at: new Date().toISOString() })
+            .update({ 
+              last_login_at: new Date().toISOString(),
+              login_count: (existingUserByEmail.login_count || 0) + 1
+            })
             .eq('id', userId);
             
         } else if (existingUserByEmail.kakao_id === null && existingUserByEmail.google_id) {
@@ -239,6 +258,22 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (existingUser) {
+      // ★ 차단/정지/탈퇴 확인
+      if (existingUser.deleted_at) {
+        return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
+      }
+      if (existingUser.is_banned) {
+        return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
+      }
+      if (existingUser.is_suspended) {
+        const suspendedUntil = existingUser.suspended_until 
+          ? new Date(existingUser.suspended_until).toISOString()
+          : '';
+        return NextResponse.redirect(
+          new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
+        );
+      }
+
       // 기존 사용자 - 정보 업데이트
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
@@ -247,6 +282,7 @@ export async function GET(request: NextRequest) {
           profile_image: profileImage,
           email,
           last_login_at: new Date().toISOString(),
+          login_count: (existingUser.login_count || 0) + 1,
         })
         .eq('kakao_id', kakaoId)
         .select()
