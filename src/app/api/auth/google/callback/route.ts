@@ -28,7 +28,6 @@ interface GoogleUserInfo {
 
 /**
  * 구글 로그인 콜백 - 토큰 교환 및 사용자 정보 저장
- * State 검증, 이메일 검증 확인 추가
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -36,7 +35,6 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // 에러 처리
   if (error) {
     console.error('Google auth error:', error);
     return NextResponse.redirect(new URL('/login?error=google_auth_failed', request.url));
@@ -59,7 +57,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
   }
 
-  // Code verifier 가져오기 (PKCE)
   const codeVerifier = request.cookies.get(OAUTH_CODE_VERIFIER_COOKIE)?.value;
   if (!codeVerifier) {
     console.error('Code verifier missing');
@@ -76,12 +73,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. 인가 코드로 토큰 요청 (PKCE code_verifier 포함)
+    // 1. 토큰 요청
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: GOOGLE_CLIENT_ID,
@@ -100,11 +95,9 @@ export async function GET(request: NextRequest) {
 
     const tokenData: GoogleTokenResponse = await tokenResponse.json();
 
-    // 2. 액세스 토큰으로 사용자 정보 요청
+    // 2. 사용자 정보 요청
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-      },
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
     if (!userResponse.ok) {
@@ -114,19 +107,18 @@ export async function GET(request: NextRequest) {
 
     const userData: GoogleUserInfo = await userResponse.json();
 
-    // 3. 이메일 검증 확인 (보안 강화)
+    // 3. 이메일 검증 확인
     if (!userData.verified_email) {
       console.error('Email not verified:', userData.email);
       return NextResponse.redirect(new URL('/login?error=email_not_verified', request.url));
     }
 
-    // 4. 사용자 정보 추출
     const googleId = userData.id;
     const email = userData.email;
     const nickname = userData.name || userData.given_name || `User${googleId.slice(-4)}`;
     const profileImage = userData.picture || null;
 
-    // 5. Supabase 연결
+    // 4. Supabase 연결
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
@@ -137,77 +129,50 @@ export async function GET(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 6. 이메일로 기존 계정 확인
+    let userId: string;
+    let userRole: string = 'user';
+    let needsOnboarding = false;
+    let finalNickname = nickname;
+
+    // 5. 이메일로 기존 계정 확인
     const { data: existingUserByEmail } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
       .single();
 
-    let userId: string;
-    let userRole: string = 'user';
-    let needsOnboarding = false;
-
     if (existingUserByEmail) {
-      // ★ 차단/정지/탈퇴 확인
+      // 차단/정지/탈퇴 확인 (컬럼이 있는 경우만)
       if (existingUserByEmail.deleted_at) {
         return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
       }
-      if (existingUserByEmail.is_banned) {
+      if (existingUserByEmail.is_banned === true) {
         return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
       }
-      if (existingUserByEmail.is_suspended) {
-        const suspendedUntil = existingUserByEmail.suspended_until 
-          ? new Date(existingUserByEmail.suspended_until).toISOString()
-          : '';
-        return NextResponse.redirect(
-          new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
-        );
+      if (existingUserByEmail.is_suspended === true) {
+        return NextResponse.redirect(new URL('/login?error=account_suspended', request.url));
       }
 
-      // 이메일로 기존 계정 존재
-      if (existingUserByEmail.google_id === googleId) {
-        // 이미 구글 연동된 계정 - 로그인
-        userId = existingUserByEmail.id;
-        userRole = existingUserByEmail.role || 'user';
-        needsOnboarding = !existingUserByEmail.is_onboarding_complete;
-        
-        // 마지막 로그인 시간 및 로그인 횟수 업데이트
+      userId = existingUserByEmail.id;
+      userRole = existingUserByEmail.role || 'user';
+      finalNickname = existingUserByEmail.nickname || nickname;
+      needsOnboarding = existingUserByEmail.is_onboarding_complete === false;
+      
+      // 로그인 시간 업데이트 (실패해도 무시)
+      await supabase
+        .from('users')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (!existingUserByEmail.google_id) {
+        // 구글 ID 연동
         await supabase
           .from('users')
-          .update({ 
-            last_login_at: new Date().toISOString(),
-            login_count: (existingUserByEmail.login_count || 0) + 1
-          })
+          .update({ google_id: googleId })
           .eq('id', userId);
-          
-      } else if (existingUserByEmail.google_id === null && existingUserByEmail.kakao_id) {
-        // 카카오로 가입된 계정 - 구글 연동 필요
-        const provider = existingUserByEmail.kakao_id ? '카카오' : '다른 방법';
-        return NextResponse.redirect(
-          new URL(`/login?error=email_exists&provider=${provider}`, request.url)
-        );
-      } else {
-        // 구글 ID 연동
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ 
-            google_id: googleId,
-            last_login_at: new Date().toISOString()
-          })
-          .eq('id', existingUserByEmail.id);
-          
-        if (updateError) {
-          console.error('Update error:', updateError);
-          return NextResponse.redirect(new URL('/login?error=db_error', request.url));
-        }
-        
-        userId = existingUserByEmail.id;
-        userRole = existingUserByEmail.role || 'user';
-        needsOnboarding = !existingUserByEmail.is_onboarding_complete;
       }
     } else {
-      // 구글 ID로 기존 계정 확인
+      // 6. 구글 ID로 기존 계정 확인
       const { data: existingUserByGoogleId } = await supabase
         .from('users')
         .select('*')
@@ -215,37 +180,32 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existingUserByGoogleId) {
-        // ★ 차단/정지/탈퇴 확인
+        // 차단/정지/탈퇴 확인
         if (existingUserByGoogleId.deleted_at) {
           return NextResponse.redirect(new URL('/login?error=account_deleted', request.url));
         }
-        if (existingUserByGoogleId.is_banned) {
+        if (existingUserByGoogleId.is_banned === true) {
           return NextResponse.redirect(new URL('/login?error=account_banned', request.url));
         }
-        if (existingUserByGoogleId.is_suspended) {
-          const suspendedUntil = existingUserByGoogleId.suspended_until 
-            ? new Date(existingUserByGoogleId.suspended_until).toISOString()
-            : '';
-          return NextResponse.redirect(
-            new URL(`/login?error=account_suspended&until=${encodeURIComponent(suspendedUntil)}`, request.url)
-          );
+        if (existingUserByGoogleId.is_suspended === true) {
+          return NextResponse.redirect(new URL('/login?error=account_suspended', request.url));
         }
 
-        // 구글 ID로 가입된 계정 존재 (이메일이 변경된 경우)
         userId = existingUserByGoogleId.id;
         userRole = existingUserByGoogleId.role || 'user';
-        needsOnboarding = !existingUserByGoogleId.is_onboarding_complete;
+        finalNickname = existingUserByGoogleId.nickname || nickname;
+        needsOnboarding = existingUserByGoogleId.is_onboarding_complete === false;
         
+        // 로그인 시간 업데이트
         await supabase
           .from('users')
           .update({ 
             email,
-            last_login_at: new Date().toISOString(),
-            login_count: (existingUserByGoogleId.login_count || 0) + 1
+            last_login_at: new Date().toISOString()
           })
           .eq('id', userId);
       } else {
-        // 신규 사용자 - 회원가입
+        // 7. 신규 사용자 생성 (최소 필드만)
         const { data: newUser, error: createError } = await supabase
           .from('users')
           .insert({
@@ -253,7 +213,6 @@ export async function GET(request: NextRequest) {
             email,
             nickname,
             profile_image: profileImage,
-            is_onboarding_complete: false,
           })
           .select()
           .single();
@@ -264,25 +223,25 @@ export async function GET(request: NextRequest) {
         }
         
         userId = newUser.id;
+        finalNickname = nickname;
         needsOnboarding = true;
       }
     }
 
-    // 7. JWT 세션 쿠키 생성
+    // 8. JWT 세션 생성
     const sessionToken = await createUserSession({
       userId,
       email,
-      nickname,
+      nickname: finalNickname,
       profileImage,
       googleId,
       role: userRole,
     });
 
-    // 8. 쿠키 설정 및 리다이렉트
+    // 9. 쿠키 설정 및 리다이렉트
     const redirectUrl = needsOnboarding ? '/onboarding' : '/';
     const response = NextResponse.redirect(new URL(redirectUrl, request.url));
     
-    // JWT 세션 쿠키 설정
     response.cookies.set(USER_SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -291,10 +250,10 @@ export async function GET(request: NextRequest) {
       path: '/',
     });
 
-    // OAuth 관련 쿠키 삭제
     response.cookies.delete(OAUTH_STATE_COOKIE);
     response.cookies.delete(OAUTH_CODE_VERIFIER_COOKIE);
 
+    console.log(`Google login success: ${userId} (${finalNickname})`);
     return response;
 
   } catch (err) {
