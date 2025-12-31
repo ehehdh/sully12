@@ -1,36 +1,72 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useAuth } from '@/lib/useAuth';
 import { ArrowLeft } from 'lucide-react';
 import { Suspense } from 'react';
 
 function LoginContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const error = searchParams.get('error');
+  const urlError = searchParams.get('error');
   const errorMsg = searchParams.get('msg');
   const provider = searchParams.get('provider');
   const until = searchParams.get('until');
-  const { isAuthenticated, isLoading } = useAuth();
   
-  // 로그인 진행 중 상태
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [actualError, setActualError] = useState<string | null>(null);
+  const [isBannedFromApi, setIsBannedFromApi] = useState(false);
 
-  // 이미 로그인되어 있으면 홈으로 리다이렉트
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      // 로그인 성공한 경우 - 에러 파라미터 있어도 무시하고 홈으로
-      window.location.href = '/';
+  // 실제 API 호출하여 상태 확인
+  const checkAuthStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      const data = await response.json();
+
+      if (response.status === 403) {
+        // 실제로 차단된 상태
+        setIsBannedFromApi(true);
+        setActualError(data.error || 'account_banned');
+        setIsAuthenticated(false);
+      } else if (data.user) {
+        // 로그인되어 있음 → 홈으로
+        setIsAuthenticated(true);
+        window.location.href = '/';
+        return;
+      } else {
+        // 로그인되어 있지 않음 (차단 아님)
+        setIsAuthenticated(false);
+        setIsBannedFromApi(false);
+        // URL에 차단 에러가 있지만 실제로는 차단 아님 → URL 정리
+        if (urlError === 'account_banned' || urlError === 'account_suspended' || urlError === 'account_deleted') {
+          window.history.replaceState({}, '', '/login');
+          setActualError(null);
+        } else if (urlError) {
+          setActualError(urlError);
+        }
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
     }
-  }, [isAuthenticated, isLoading]);
+  }, [urlError]);
 
-  // 에러가 있지만 로그인이 가능한 경우 (DB에서 차단 해제된 경우)
-  // 새로고침 없이 에러 표시하되, 로그인 시도 가능하게
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
   const getErrorMessage = (errorCode: string | null) => {
+    if (!errorCode) return null;
+    
     switch (errorCode) {
       case 'kakao_auth_failed':
         return '카카오 로그인이 취소되었거나 실패했습니다.';
@@ -47,43 +83,40 @@ function LoginContent() {
       case 'config_error':
         return '서버 설정에 문제가 있습니다.';
       case 'email_exists':
-        return `이미 ${provider || '다른 방법'}으로 가입된 이메일입니다. ${provider || '해당 방법'}으로 로그인해주세요.`;
+        return `이미 ${provider || '다른 방법'}으로 가입된 이메일입니다.`;
       case 'account_banned':
-        return '🚫 이 계정은 서비스 이용이 영구 제한되었습니다. 관리자가 차단을 해제했다면 다시 로그인해보세요.';
+      case 'Account has been banned':
+        if (!isBannedFromApi) return null; // API에서 차단 확인 안되면 무시
+        return '🚫 이 계정은 서비스 이용이 영구 제한되었습니다.';
       case 'account_suspended':
+        if (!isBannedFromApi) return null;
         if (until) {
           try {
             const suspendedUntil = new Date(until).toLocaleString('ko-KR');
-            return `⚠️ 이 계정은 ${suspendedUntil}까지 일시 정지되었습니다.`;
+            return `⚠️ ${suspendedUntil}까지 일시 정지되었습니다.`;
           } catch {
             return '⚠️ 이 계정은 현재 일시 정지 상태입니다.';
           }
         }
         return '⚠️ 이 계정은 현재 일시 정지 상태입니다.';
       case 'account_deleted':
-        return '❌ 탈퇴한 계정입니다. 새로 가입하시려면 로그인 버튼을 클릭하세요.';
+        return '❌ 탈퇴한 계정입니다. 새로 가입하시려면 로그인하세요.';
       case 'invalid_state':
-        return '보안 검증에 실패했습니다. 다시 시도해주세요.';
+        return '보안 검증 실패. 다시 시도해주세요.';
       case 'email_not_verified':
-        return '이메일 인증이 필요합니다. 이메일을 확인해주세요.';
+        return '이메일 인증이 필요합니다.';
       default:
         return null;
     }
   };
 
-  const errorMessage = getErrorMessage(error);
+  const errorMessage = getErrorMessage(actualError);
 
-  // 로그인 버튼 클릭 핸들러 - URL에서 에러 파라미터 제거 후 로그인 진행
-  const handleLogin = (provider: 'google' | 'kakao') => {
+  const handleLogin = (loginProvider: 'google' | 'kakao') => {
     setIsLoggingIn(true);
-    
-    // URL 에러 파라미터 제거 (히스토리에서도 정리)
-    if (error) {
-      window.history.replaceState({}, '', '/login');
-    }
-    
-    // 로그인 페이지로 이동
-    window.location.href = `/api/auth/${provider}`;
+    setActualError(null);
+    window.history.replaceState({}, '', '/login');
+    window.location.href = `/api/auth/${loginProvider}`;
   };
 
   if (isLoading) {
@@ -96,11 +129,9 @@ function LoginContent() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Background Ambience */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-yellow-500/10 rounded-full blur-3xl -z-10 animate-pulse" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -z-10 animate-pulse" />
 
-      {/* Back Button */}
       <Link 
         href="/" 
         className="absolute top-6 left-6 flex items-center gap-2 text-muted-foreground hover:text-white transition-colors"
@@ -115,9 +146,7 @@ function LoginContent() {
         transition={{ duration: 0.6 }}
         className="w-full max-w-md"
       >
-        {/* Login Card */}
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-          {/* Logo & Title */}
           <div className="text-center mb-8">
             <motion.h1
               initial={{ scale: 0.9 }}
@@ -131,7 +160,6 @@ function LoginContent() {
             </p>
           </div>
 
-          {/* Error Message */}
           {errorMessage && !isLoggingIn && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -144,15 +172,10 @@ function LoginContent() {
                   상세: {errorMsg}
                 </p>
               )}
-              <p className="mt-3 text-xs text-muted-foreground">
-                💡 문제가 해결되었다면 아래 버튼으로 다시 로그인하세요
-              </p>
             </motion.div>
           )}
 
-          {/* Social Login Buttons */}
           <div className="space-y-3">
-            {/* Kakao Login Button */}
             <motion.button
               onClick={() => handleLogin('kakao')}
               disabled={isLoggingIn}
@@ -165,17 +188,13 @@ function LoginContent() {
               ) : (
                 <>
                   <svg width="24" height="24" viewBox="0 0 24 24">
-                    <path
-                      fill="#191919"
-                      d="M12 3C6.477 3 2 6.463 2 10.691c0 2.676 1.785 5.037 4.475 6.376-.143.508-.919 3.274-.949 3.489 0 0-.019.161.085.222.104.061.226.014.226.014.299-.042 3.461-2.265 4.009-2.648.702.1 1.434.152 2.154.152 5.523 0 10-3.463 10-7.691S17.523 3 12 3z"
-                    />
+                    <path fill="#191919" d="M12 3C6.477 3 2 6.463 2 10.691c0 2.676 1.785 5.037 4.475 6.376-.143.508-.919 3.274-.949 3.489 0 0-.019.161.085.222.104.061.226.014.226.014.299-.042 3.461-2.265 4.009-2.648.702.1 1.434.152 2.154.152 5.523 0 10-3.463 10-7.691S17.523 3 12 3z"/>
                   </svg>
                   <span>카카오로 시작하기</span>
                 </>
               )}
             </motion.button>
 
-            {/* Google Login Button */}
             <motion.button
               onClick={() => handleLogin('google')}
               disabled={isLoggingIn}
@@ -199,7 +218,6 @@ function LoginContent() {
             </motion.button>
           </div>
 
-          {/* Divider */}
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-white/10"></div>
@@ -211,23 +229,17 @@ function LoginContent() {
             </div>
           </div>
 
-          {/* Additional Info */}
           <div className="text-center text-xs text-muted-foreground/70 space-y-2">
             <p>
               로그인 시{' '}
-              <Link href="/terms" className="text-white/80 underline">
-                이용약관
-              </Link>
+              <Link href="/terms" className="text-white/80 underline">이용약관</Link>
               {' '}및{' '}
-              <Link href="/privacy" className="text-white/80 underline">
-                개인정보처리방침
-              </Link>
+              <Link href="/privacy" className="text-white/80 underline">개인정보처리방침</Link>
               에 동의하게 됩니다.
             </p>
           </div>
         </div>
 
-        {/* Features */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
