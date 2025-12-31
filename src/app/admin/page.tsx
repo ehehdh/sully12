@@ -226,7 +226,7 @@ export default function AdminPage() {
         </header>
 
         {/* 퀵 링크 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Link href="/admin/debates" className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl hover:bg-yellow-500/20 transition-colors">
             <div className="text-2xl mb-2">🏆</div>
             <h3 className="font-bold">토론 기록</h3>
@@ -248,7 +248,7 @@ export default function AdminPage() {
             <p className="text-xs text-muted-foreground">유저 신고 처리</p>
           </Link>
           <Link href="/admin/logs" className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl hover:bg-indigo-500/20 transition-colors">
-            <div className="text-2xl mb-2">??</div>
+            <div className="text-2xl mb-2">📜</div>
             <h3 className="font-bold">활동 로그</h3>
             <p className="text-xs text-muted-foreground">관리자 활동 추적</p>
           </Link>
@@ -257,6 +257,16 @@ export default function AdminPage() {
             <h3 className="font-bold">이슈 관리</h3>
             <p className="text-xs text-muted-foreground">토론 주제 관리</p>
           </Link>
+          <a 
+            href="https://supabase.com/dashboard" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="p-4 bg-gradient-to-br from-emerald-600/20 to-green-700/20 border border-emerald-500/30 rounded-xl hover:from-emerald-600/30 hover:to-green-700/30 transition-colors"
+          >
+            <div className="text-2xl mb-2">⚡</div>
+            <h3 className="font-bold">Supabase</h3>
+            <p className="text-xs text-muted-foreground">DB 대시보드 (외부)</p>
+          </a>
           <Link href="/" className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl hover:bg-purple-500/20 transition-colors">
             <div className="text-2xl mb-2">🏠</div>
             <h3 className="font-bold">메인 페이지</h3>

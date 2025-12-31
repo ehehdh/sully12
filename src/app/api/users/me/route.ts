@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest) {
     );
 
     // 업데이트할 데이터 준비
-    const updateData: Record<string, any> = {};
+    const updateData: Record<string, unknown> = {};
     if (region !== undefined) updateData.region = region;
     if (bio !== undefined) updateData.bio = bio;
     if (gender !== undefined) updateData.gender = gender;
@@ -165,34 +165,113 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('Missing Supabase configuration for user deletion');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Soft Delete 처리 (deleted_at 설정)
-    // 실제 데이터 삭제가 아니라 비활성화 처리입니다.
-    // 개인정보 보관 기간 정책에 따라 추후 영구 삭제 스케줄링이 필요할 수 있습니다.
-    const { error } = await supabase
+    // 먼저 현재 사용자 정보 확인
+    const { data: existingUser, error: fetchError } = await supabase
       .from('users')
-      .update({ 
-        deleted_at: new Date().toISOString(),
-        nickname: `Deleted User ${session.userId.slice(0, 8)}`, // 닉네임 익명화
-        kakao_id: null, // 소셜 연동 해제
-        google_id: null, // 소셜 연동 해제
-        // email은 보관할 수도 있고 삭제할 수도 있음 (정책에 따라)
-      })
-      .eq('id', session.userId);
+      .select('id, nickname, deleted_at')
+      .eq('id', session.userId)
+      .single();
 
-    if (error) {
-      console.error('User delete error:', error);
-      return NextResponse.json({ error: '회원 탈퇴 처리에 실패했습니다.' }, { status: 500 });
+    if (fetchError || !existingUser) {
+      console.error('User not found for deletion:', fetchError);
+      return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
     }
+
+    if (existingUser.deleted_at) {
+      return NextResponse.json({ error: '이미 탈퇴한 계정입니다.' }, { status: 400 });
+    }
+
+    // Soft Delete 처리
+    const anonymizedNickname = `탈퇴회원_${session.userId.slice(0, 8)}`;
+    
+    // 기본 업데이트 데이터 (필수 필드만)
+    const baseUpdateData = {
+      deleted_at: new Date().toISOString(),
+      nickname: anonymizedNickname,
+    };
+
+    // 추가 필드들 (컬럼이 존재하지 않아도 에러 나지 않도록 별도 처리)
+    const additionalFields: Record<string, unknown> = {
+      email: null,
+      profile_image: null,
+      bio: null,
+      region: null,
+    };
+
+    // 첫 번째 시도: 소셜 ID 포함 업데이트
+    let updateSuccess = false;
+    try {
+      const { error: fullUpdateError } = await supabase
+        .from('users')
+        .update({
+          ...baseUpdateData,
+          ...additionalFields,
+          kakao_id: null,
+          google_id: null,
+        })
+        .eq('id', session.userId);
+
+      if (!fullUpdateError) {
+        updateSuccess = true;
+      } else {
+        console.warn('Full update failed, trying without social IDs:', fullUpdateError.message);
+      }
+    } catch (e) {
+      console.warn('Full update threw exception:', e);
+    }
+
+    // 두 번째 시도: 소셜 ID 제외
+    if (!updateSuccess) {
+      try {
+        const { error: partialUpdateError } = await supabase
+          .from('users')
+          .update({
+            ...baseUpdateData,
+            ...additionalFields,
+          })
+          .eq('id', session.userId);
+
+        if (!partialUpdateError) {
+          updateSuccess = true;
+        } else {
+          console.warn('Partial update failed, trying minimal:', partialUpdateError.message);
+        }
+      } catch (e) {
+        console.warn('Partial update threw exception:', e);
+      }
+    }
+
+    // 세 번째 시도: 최소 업데이트
+    if (!updateSuccess) {
+      const { error: minimalUpdateError } = await supabase
+        .from('users')
+        .update(baseUpdateData)
+        .eq('id', session.userId);
+
+      if (minimalUpdateError) {
+        console.error('All update attempts failed:', minimalUpdateError);
+        return NextResponse.json({ 
+          error: '회원 탈퇴 처리에 실패했습니다. 관리자에게 문의해주세요.' 
+        }, { status: 500 });
+      }
+    }
+
+    console.log(`User soft-deleted: ${session.userId} (was: ${existingUser.nickname})`);
 
     const response = NextResponse.json({
       success: true,
-      message: '회원 탈퇴가 완료되었습니다.'
+      message: '회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.'
     });
 
     // 세션 쿠키 삭제 (로그아웃)
